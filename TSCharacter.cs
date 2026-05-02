@@ -8,6 +8,7 @@ using TS_Server.Server;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.Linq;
 using Microsoft.VisualBasic;
@@ -30,6 +31,7 @@ namespace TS_Server.Client
         public int goodness;
         public string date;
     }
+
     public class TSCharacter
     {
         public byte orient;
@@ -46,7 +48,7 @@ namespace TS_Server.Client
         public int def;
         public int def2;
         public byte element;
-        public TSEquipment[] equipment; // หมวก, ชุด, อาวุธ, มือ, เท้า, เพิ่มเติม;
+        public TSEquipment[] equipment;
         public byte face;
         public ushort ghost, god;
         public uint gold, gold_bank;
@@ -66,7 +68,6 @@ namespace TS_Server.Client
         public int mag2;
         public ushort mapID, mapX, mapY;
         public ushort s_mapID, s_mapX, s_mapY;
-        //public byte[] name;
         public string name;
         public byte nb_equips;
         public int next_item;
@@ -96,7 +97,7 @@ namespace TS_Server.Client
         public byte skill_ball;
         public byte int_ball;
         public byte atk_ball;
-        public List<byte> allball /*= new List<byte>()*/;
+        public List<byte> allball;
         public bool[] ballList;
         public ushort[] skill_rb2;
         public byte ai;
@@ -104,18 +105,9 @@ namespace TS_Server.Client
         public byte onoffbt;
         public int guild_id;
 
-
         public ConcurrentDictionary<ushort, ushort> armypoint;
         public ConcurrentDictionary<ushort, ushort> uesitemcout;
 
-
-        /* public ushort armypoint1;//ค่ายทหารจอมยุทธ
-         public ushort armypoint2;//ค่ายทหารผ้าเหลือง
-         public ushort armypoint3;//ค่ายทหารง้อก๊ก
-         public ushort armypoint4;//ค่ายทหารจ๊กก๊ก
-         public ushort armypoint5;//ค่ายทหารวุยก๊ก*/
-
-        //ส่วนของการใช้งานไอเท็ม
         public int numberID;
         public int charID;
         public int itemID;
@@ -130,36 +122,33 @@ namespace TS_Server.Client
         System.Timers.Timer checkEndtime = new System.Timers.Timer();
         public bool PkSwich = false;
         public bool JamSwich = false;
-        public uint streamBattleId = 0; //<< เพิ่มตรงนี้ส่องต่อสู้ในส่วนของสตรีมไอดี
-        public uint jamBattleId = 0; //<< เพิ่มตรงนี้ส่องต่อสู้ในส่วนของสตรีมไอดี        
+        public uint streamBattleId = 0;
+        public uint jamBattleId = 0;
         public byte gm;
         public bool gmchat = false;
         public bool syschat = false;
         public int point;
-        //เพิ่มใหม่ส่วนของการซื้อขาย แลกเปลี่ยนขุน ไอเท็ม
+
+        // Trade related
         public uint myTradeItemsTraderId = 0;
         public uint myTradeItemsGold = 0;
         public bool myTradeItemsAccept = false;
         public int[] myTradeItemsRegisterSlots;
-
         public uint myTradePetTraderId = 0;
         public uint myTradePetGold = 0;
         public bool myTradePetAccept = false;
         public uint myTradePetRegisterSlot;
-
         public string myShopName;
         public int myShopImage = 1;
         public List<int[]> myShopItems;
         public uint visitShopId = 0;
 
-
-        //------------------------
-
         public bool autobotout = false;
         public bool botout = false;
         public bool autospSub = false;
         public byte autopotion = 0;
-        //------------ส่วนของเช็ค null DB----------------
+
+        // DB null check flags
         public bool boolequip = false;
         public bool boolinventory = false;
         public bool boolstorage = false;
@@ -174,22 +163,30 @@ namespace TS_Server.Client
         public bool boolallball = false;
         public bool boolPetuesitemcout = false;
         public bool boolPetequip = false;
-        //--------------------------------
 
         public uint accid;
-        public DateTime StartDate { get; private set; }   // วันที่หมดอายุ
-        public DateTime CreationDate { get; private set; } // วันที่เติม
-        public DateTime ExpiryDate { get; private set; }   // วันที่หมดอายุ
-        public int DaysLeft { get; private set; }          // จำนวนวันที่เหลืออยู่
-
+        public DateTime StartDate { get; private set; }
+        public DateTime CreationDate { get; private set; }
+        public DateTime ExpiryDate { get; private set; }
+        public int DaysLeft { get; private set; }
 
         public TSCharCenter center;
+
+        // Random instance (thread-safe)
+        private static readonly Random _staticRandom = new Random();
+        private static readonly object _randomLock = new object();
+        private static int GetRandomIntStatic(int min, int max)
+        {
+            lock (_randomLock)
+            {
+                return _staticRandom.Next(min, max);
+            }
+        }
 
         public TSCharacter(TSClient c)
         {
             client = c;
-            //pet = new TSPet[4]; //ของเก่า
-            pet = new TSPet[14]; //<<เพิ่มตรงนี้
+            pet = new TSPet[14];
             next_pet = 0;
             pet_battle = -1;
             equipment = new TSEquipment[6];
@@ -204,46 +201,24 @@ namespace TS_Server.Client
             skill = new ConcurrentDictionary<ushort, byte>();
             armypoint = new ConcurrentDictionary<ushort, ushort>();
             uesitemcout = new ConcurrentDictionary<ushort, ushort>();
-
-
         }
 
-        //public void loadAirtime()
-        //{
-        //    var c = new TSMysqlConnection();
-        //    MySqlDataReader data = c.selectQuery("SELECT start_date_time, end_date_time FROM " + TSServer.config.tbAccount + " WHERE id = " + client.accID);
-        //    if (data.Read())
-        //    {
-        //        ExpiryDate = Convert.ToDateTime(data.GetString(1));
-        //        Console.WriteLine(ExpiryDate);
-        //    }
+        // ====================== การจัดการฐานข้อมูลอย่างปลอดภัย (Parameterized + using) ======================
 
-        //    data.Close();
-        //    c.connection.Close();
-        //}
         public void loadAirtime()
         {
-            string query = "SELECT start_date_time, end_date_time FROM " + TSServer.config.tbAccount + " WHERE id = @accId";
-
-            using (var c = new TSMysqlConnection())
-            using (var cmd = new MySqlCommand(query, c.connection))
+            string query = $"SELECT start_date_time, end_date_time FROM " + TSServer.config.tbAccount + " WHERE id = @accId";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
             {
                 cmd.Parameters.AddWithValue("@accId", client.accID);
-                c.connection.Open();
-
-                using (var data = cmd.ExecuteReader())
+                conn.Open();
+                using (var reader = cmd.ExecuteReader())
                 {
-                    if (data.Read())
+                    if (reader.Read())
                     {
-                        if (!data.IsDBNull(0))
-                            StartDate = changYear(data.GetDateTime(0));
-                        else
-                            StartDate = changYear(DateTime.Now);
-
-                        if (!data.IsDBNull(1))
-                            ExpiryDate = changYear(data.GetDateTime(1));
-                        else
-                            ExpiryDate = changYear(DateTime.Now);
+                        StartDate = reader.IsDBNull(0) ? changYear(DateTime.Now) : changYear(reader.GetDateTime(0));
+                        ExpiryDate = reader.IsDBNull(1) ? changYear(DateTime.Now) : changYear(reader.GetDateTime(1));
                     }
                     else
                     {
@@ -252,6 +227,470 @@ namespace TS_Server.Client
                 }
             }
         }
+
+        public void loadCharDB()
+        {
+            string query = $"SELECT * FROM " + TSServer.config.tbChars + " WHERE accountid = @accId";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@accId", client.accID);
+                conn.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        try
+                        {
+                            charId = reader.GetInt32("id");
+                            level = reader.GetByte("level");
+                            hp = reader.GetInt32("hp");
+                            hp = Math.Max(1, hp);
+                            sp = reader.GetInt32("sp");
+                            mag = reader.GetInt32("mag");
+                            atk = reader.GetInt32("atk");
+                            def = reader.GetInt32("def");
+                            hpx = reader.GetInt32("hpx");
+                            spx = reader.GetInt32("spx");
+                            agi = reader.GetInt32("agi");
+                            FullHpMax = reader.GetUInt16("fullhpmax");
+                            FullSpMax = reader.GetUInt16("fullspmax");
+                            hp2 = reader.GetInt32("hp2");
+                            sp2 = reader.GetInt32("sp2");
+                            mag2 = reader.GetInt32("mag2");
+                            atk2 = reader.GetInt32("atk2");
+                            def2 = reader.GetInt32("def2");
+                            agi2 = reader.GetInt32("agi2");
+                            skill_point = reader.GetInt32("sk_point");
+                            stt_point = reader.GetInt32("stt_point");
+                            sex = reader.GetByte("sex");
+                            ghost = reader.GetUInt16("ghost");
+                            god = reader.GetUInt16("god");
+                            style = reader.GetByte("style");
+                            hair = reader.GetByte("hair");
+                            face = reader.GetByte("face");
+                            color1 = reader.GetUInt32("color1");
+                            color2 = reader.GetUInt32("color2");
+                            mapID = reader.GetUInt16("map_id");
+                            mapX = reader.GetUInt16("map_x");
+                            mapY = reader.GetUInt16("map_y");
+                            s_mapID = reader.GetUInt16("s_map_id");
+                            s_mapX = reader.GetUInt16("s_map_x");
+                            s_mapY = reader.GetUInt16("s_map_y");
+                            currentxp = reader.GetInt32("exp");
+                            totalxp = reader.GetUInt32("exp_tot");
+                            honor = reader.GetUInt32("honor");
+                            element = reader.GetByte("element");
+                            rb = reader.GetByte("reborn");
+                            job = reader.GetByte("job");
+                            gold = reader.GetUInt32("gold");
+                            gold_bank = reader.GetUInt32("gold_bank");
+                            name = reader.GetString("name");
+                            pet_battle = (sbyte)reader.GetByte("pet_battle");
+                            ai = reader.GetByte("ai");
+                            onoffbt = reader.GetByte("onoffbt");
+
+                            center = JsonConvert.DeserializeObject<TSCharCenter>(reader.GetString("center"));
+                            if (center == null) center = new TSCharCenter();
+                            center.init(this);
+
+                            // โหลด JSON fields โดยใช้ helper
+                            boolequip = loadEquipmentJsonFromReader(reader);
+                            boolinventory = loadInventoryJsonFromReader(reader);
+                            boolstorage = loadStorageJsonFromReader(reader);
+                            boolbag = loadBagJsonFromReader(reader);
+                            boolskill = loadSkillFromReader(reader);
+                            boolskill_rb2 = loadSkillRb2FromReader(reader);
+                            boolball_point = loadBallPointFromReader(reader);
+                            boolballlist = loadBallListFromReader(reader);
+                            boolhotkey = loadHotkeyFromReader(reader);
+                            booluesitemcout = loadUesitemcoutFromReader(reader);
+                            boolallball = loadAllballFromReader(reader);
+                        }
+                        catch (Exception e)
+                        {
+                            WriteLog.ErrorDB("At loadCharDB >> " + e);
+                        }
+                    }
+                }
+            }
+
+            hp_max = getHpMax();
+            sp_max = getSpMax();
+            hp_max = hp_max > 50000 ? 50000 : hp_max;
+            sp_max = sp_max > 50000 ? 50000 : sp_max;
+            hp = hp > hp_max ? hp_max : hp;
+            sp = sp > sp_max ? sp_max : sp;
+            xp_pow = rb == 0 ? 2.9 : rb == 1 ? 3.0 : 3.05;
+
+            loadPet();
+        }
+
+        // Helper methods for loading JSON safely from reader
+        private bool loadEquipmentJsonFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("equip")) ? null : reader.GetString("equip");
+            if (!string.IsNullOrEmpty(json))
+            {
+                loadEquipmentJson(JArray.Parse(json));
+                return false;
+            }
+            loadEquipmentJson(JArray.Parse("[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]"));
+            return true;
+        }
+
+        private bool loadInventoryJsonFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("inventory")) ? null : reader.GetString("inventory");
+            if (!string.IsNullOrEmpty(json))
+            {
+                inventory.loadContainerJson(JArray.Parse(json));
+                return false;
+            }
+            inventory.loadContainerJson(JArray.Parse("[[0,0,0,0,0,0,0,0,0,0], ...]")); // ใช้ default
+            return true;
+        }
+
+        private bool loadStorageJsonFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("storage")) ? null : reader.GetString("storage");
+            if (!string.IsNullOrEmpty(json))
+            {
+                storage.loadContainerJson(JArray.Parse(json));
+                return false;
+            }
+            storage.loadContainerJson(JArray.Parse("[[0,0,0,0,0,0,0,0,0,0], ...]"));
+            return true;
+        }
+
+        private bool loadBagJsonFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("bag")) ? null : reader.GetString("bag");
+            if (!string.IsNullOrEmpty(json))
+            {
+                bag.loadContainerJson(JArray.Parse(json));
+                return false;
+            }
+            bag.loadContainerJson(JArray.Parse("[[0,0,0,0,0,0,0,0,0,0], ...]"));
+            return true;
+        }
+
+        private bool loadSkillFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("skill")) ? null : reader.GetString("skill");
+            if (!string.IsNullOrEmpty(json))
+            {
+                skill = JsonConvert.DeserializeObject<ConcurrentDictionary<ushort, byte>>(json);
+                return false;
+            }
+            skill = new ConcurrentDictionary<ushort, byte>();
+            return true;
+        }
+
+        private bool loadSkillRb2FromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("skill_rb2")) ? null : reader.GetString("skill_rb2");
+            if (!string.IsNullOrEmpty(json))
+            {
+                skill_rb2 = JsonConvert.DeserializeObject<ushort[]>(json);
+                return false;
+            }
+            skill_rb2 = new ushort[8];
+            return true;
+        }
+
+        private bool loadBallPointFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("ball_point")) ? null : reader.GetString("ball_point");
+            if (!string.IsNullOrEmpty(json))
+            {
+                ball_point = JsonConvert.DeserializeObject<byte>(json);
+                return false;
+            }
+            ball_point = 0;
+            return true;
+        }
+
+        private bool loadBallListFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("ballList")) ? null : reader.GetString("ballList");
+            if (!string.IsNullOrEmpty(json))
+            {
+                ballList = JsonConvert.DeserializeObject<bool[]>(json);
+                if (ballList == null) ballList = new bool[12];
+                return false;
+            }
+            ballList = new bool[12];
+            return true;
+        }
+
+        private bool loadHotkeyFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("hotkey")) ? null : reader.GetString("hotkey");
+            if (!string.IsNullOrEmpty(json))
+            {
+                hotkey = JsonConvert.DeserializeObject<ushort[]>(json);
+                return false;
+            }
+            hotkey = new ushort[10];
+            return true;
+        }
+
+        private bool loadUesitemcoutFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("uesitemcout")) ? null : reader.GetString("uesitemcout");
+            if (!string.IsNullOrEmpty(json))
+            {
+                uesitemcout = JsonConvert.DeserializeObject<ConcurrentDictionary<ushort, ushort>>(json);
+                return false;
+            }
+            uesitemcout = new ConcurrentDictionary<ushort, ushort>();
+            return true;
+        }
+
+        private bool loadAllballFromReader(MySqlDataReader reader)
+        {
+            string json = reader.IsDBNull(reader.GetOrdinal("allball")) ? null : reader.GetString("allball");
+            if (!string.IsNullOrEmpty(json))
+            {
+                allball = JsonConvert.DeserializeObject<List<byte>>(json);
+                return false;
+            }
+            allball = new List<byte> { 0, 0, 0 };
+            return true;
+        }
+
+        public void loadMallpoint()
+        {
+            string query = $"SELECT gm, point FROM " + TSServer.config.tbAccount + " WHERE id = @id";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@id", client.accID);
+                conn.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        gm = reader.GetByte("gm");
+                        point = reader.GetInt32("point");
+                    }
+                }
+            }
+        }
+
+        public void SavePoint()
+        {
+            string query = $"UPDATE " + TSServer.config.tbAccount + " SET point = @point WHERE Id = @id";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@point", point);
+                cmd.Parameters.AddWithValue("@id", client.accID);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void initChar(byte[] data, byte[] name)
+        {
+            loadAirtime();
+            if (TSServer.config.airtime > 0)
+            {
+                Add_Airtime(TSServer.config.airtime);
+                CreationDate = changYear(DateTime.Now);
+                StartDate = CreationDate;
+            }
+            else
+            {
+                CreationDate = StartDate;
+            }
+
+            string ctime = CreationDate.ToString("yyyy-MM-dd HH:mm:ss");
+            string extime = ExpiryDate.ToString("yyyy-MM-dd HH:mm:ss");
+            string pass1 = PacketReader.readString(data, 22, data[21]);
+            string pass2 = PacketReader.readString(data, 22 + pass1.Length + 1, data[22 + pass1.Length]);
+
+            // อัปเดต account
+            string updateAccount = $"UPDATE " + TSServer.config.tbAccount + " SET password = @pass1, password2 = @pass2, start_date_time = @start, end_date_time = @end WHERE id = @id";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(updateAccount, conn))
+            {
+                cmd.Parameters.AddWithValue("@pass1", pass1);
+                cmd.Parameters.AddWithValue("@pass2", pass2);
+                cmd.Parameters.AddWithValue("@start", ctime);
+                cmd.Parameters.AddWithValue("@end", extime);
+                cmd.Parameters.AddWithValue("@id", client.accID);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+
+            // สร้างตัวละคร
+            string insertChar = $@"INSERT INTO " + TSServer.config.tbChars + @" 
+                (accountid, name, mag, atk, def, hpx, spx, agi, sex, style, hair, face, color1, color2, element, map_id, map_x, map_y, s_map_id, s_map_x, s_map_y, equip, inventory, storage, bag, allball, ball_point, skill, skill_rb2, balllist, hotkey, uesitemcout)
+                VALUES (@accId, @name, @mag, @atk, @def, @hpx, @spx, @agi, @sex, @style, @hair, @face, @color1, @color2, @element, @mapId, @mapX, @mapY, @sMapId, @sMapX, @sMapY, @equip, @inventory, @storage, @bag, @allball, @ballPoint, @skill, @skillRb2, @balllist, @hotkey, @uesitemcout)";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(insertChar, conn))
+            {
+                cmd.Parameters.AddWithValue("@accId", client.accID);
+                cmd.Parameters.AddWithValue("@name", Encoding.UTF8.GetString(name)); // เปลี่ยนเป็น UTF8
+                cmd.Parameters.AddWithValue("@mag", data[15]);
+                cmd.Parameters.AddWithValue("@atk", data[16]);
+                cmd.Parameters.AddWithValue("@def", data[17]);
+                cmd.Parameters.AddWithValue("@hpx", data[18]);
+                cmd.Parameters.AddWithValue("@spx", data[19]);
+                cmd.Parameters.AddWithValue("@agi", data[20]);
+                cmd.Parameters.AddWithValue("@sex", data[2]);
+                cmd.Parameters.AddWithValue("@style", data[3]);
+                cmd.Parameters.AddWithValue("@hair", data[4]);
+                cmd.Parameters.AddWithValue("@face", data[5]);
+                cmd.Parameters.AddWithValue("@color1", PacketReader.read32(data, 6));
+                cmd.Parameters.AddWithValue("@color2", PacketReader.read32(data, 10));
+                cmd.Parameters.AddWithValue("@element", data[14]);
+                cmd.Parameters.AddWithValue("@mapId", 10817);
+                cmd.Parameters.AddWithValue("@mapX", 442);
+                cmd.Parameters.AddWithValue("@mapY", 758);
+                cmd.Parameters.AddWithValue("@sMapId", 12003);
+                cmd.Parameters.AddWithValue("@sMapX", 500);
+                cmd.Parameters.AddWithValue("@sMapY", 500);
+                cmd.Parameters.AddWithValue("@equip", "[[0,0,0,0,0,0,0,0,0,0],[2,19737,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]");
+                cmd.Parameters.AddWithValue("@inventory", "[]");
+                cmd.Parameters.AddWithValue("@storage", "[]");
+                cmd.Parameters.AddWithValue("@bag", "[]");
+                cmd.Parameters.AddWithValue("@allball", "[0,0,0]");
+                cmd.Parameters.AddWithValue("@ballPoint", 0);
+                cmd.Parameters.AddWithValue("@skill", "{}");
+                cmd.Parameters.AddWithValue("@skillRb2", "[0,0,0,0,0,0,0,0]");
+                cmd.Parameters.AddWithValue("@balllist", "[false,false,false,false,false,false,false,false,false,false,false,false]");
+                cmd.Parameters.AddWithValue("@hotkey", "[0,0,0,0,0,0,0,0,0,0]");
+                cmd.Parameters.AddWithValue("@uesitemcout", "{}");
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+                charId = (int)cmd.LastInsertedId;
+            }
+        }
+
+        public void saveCharDB(MySqlConnection conn) // รับ connection จากภายนอก
+        {
+            string query = $@"UPDATE " + TSServer.config.tbChars + @" SET 
+                level = @level, exp = @curr_exp, exp_tot = @exp_tot, hp = @hp, fullhpmax = @fullhpmax,
+                sp = @sp, fullspmax = @fullspmax, mag = @mag, atk = @atk, def = @def, hpx = @hpx,
+                spx = @spx, agi = @agi, sk_point = @sk_point, stt_point = @stt_point, ghost = @ghost,
+                god = @god, map_id = @map_id, map_x = @map_x, map_y = @map_y, s_map_id = @s_map_id,
+                s_map_x = @s_map_x, s_map_y = @s_map_y, gold = @gold, hair = @hair, color1 = @color1,
+                color2 = @color2, gold_bank = @gold_bank, element = @element, honor = @honor,
+                pet_battle = @pet_battle, equip = @equip, inventory = @inventory, bag = @bag,
+                storage = @storage, skill = @skill, skill_rb2 = @skill_rb2, ball_point = @ball_point,
+                balllist = @balllist, hotkey = @hotkey, uesitemcout = @uesitemcout, reborn = @rb,
+                job = @job, ai = @ai, onoffbt = @onoffbt, allball = @allball, center = @center
+                WHERE accountid = @id";
+
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@level", level);
+                cmd.Parameters.AddWithValue("@curr_exp", currentxp);
+                cmd.Parameters.AddWithValue("@exp_tot", totalxp);
+                cmd.Parameters.AddWithValue("@hp", hp);
+                cmd.Parameters.AddWithValue("@fullhpmax", FullHpMax);
+                cmd.Parameters.AddWithValue("@sp", sp);
+                cmd.Parameters.AddWithValue("@fullspmax", FullSpMax);
+                cmd.Parameters.AddWithValue("@mag", mag);
+                cmd.Parameters.AddWithValue("@atk", atk);
+                cmd.Parameters.AddWithValue("@def", def);
+                cmd.Parameters.AddWithValue("@hpx", hpx);
+                cmd.Parameters.AddWithValue("@spx", spx);
+                cmd.Parameters.AddWithValue("@agi", agi);
+                cmd.Parameters.AddWithValue("@sk_point", skill_point);
+                cmd.Parameters.AddWithValue("@stt_point", stt_point);
+                cmd.Parameters.AddWithValue("@ghost", ghost);
+                cmd.Parameters.AddWithValue("@god", god);
+                cmd.Parameters.AddWithValue("@hair", hair);
+                cmd.Parameters.AddWithValue("@color1", color1);
+                cmd.Parameters.AddWithValue("@color2", color2);
+                cmd.Parameters.AddWithValue("@map_id", mapID);
+                cmd.Parameters.AddWithValue("@map_x", mapX);
+                cmd.Parameters.AddWithValue("@map_y", mapY);
+                cmd.Parameters.AddWithValue("@s_map_id", s_mapID);
+                cmd.Parameters.AddWithValue("@s_map_x", s_mapX);
+                cmd.Parameters.AddWithValue("@s_map_y", s_mapY);
+                cmd.Parameters.AddWithValue("@gold", gold);
+                cmd.Parameters.AddWithValue("@gold_bank", gold_bank);
+                cmd.Parameters.AddWithValue("@honor", honor);
+                cmd.Parameters.AddWithValue("@pet_battle", pet_battle);
+                cmd.Parameters.AddWithValue("@equip", JsonConvert.SerializeObject(saveEquipmentJson(), Formatting.None));
+                cmd.Parameters.AddWithValue("@inventory", JsonConvert.SerializeObject(inventory.saveContainerJson(), Formatting.None));
+                cmd.Parameters.AddWithValue("@bag", JsonConvert.SerializeObject(bag.saveContainerJson(), Formatting.None));
+                cmd.Parameters.AddWithValue("@storage", JsonConvert.SerializeObject(storage.saveContainerJson(), Formatting.None));
+                cmd.Parameters.AddWithValue("@skill", JsonConvert.SerializeObject(skill, Formatting.None));
+                cmd.Parameters.AddWithValue("@skill_rb2", JsonConvert.SerializeObject(skill_rb2, Formatting.None));
+                cmd.Parameters.AddWithValue("@ball_point", JsonConvert.SerializeObject(ball_point, Formatting.None));
+                cmd.Parameters.AddWithValue("@balllist", JsonConvert.SerializeObject(ballList, Formatting.None));
+                cmd.Parameters.AddWithValue("@hotkey", JsonConvert.SerializeObject(hotkey, Formatting.None));
+                cmd.Parameters.AddWithValue("@uesitemcout", JsonConvert.SerializeObject(uesitemcout, Formatting.None));
+                cmd.Parameters.AddWithValue("@rb", rb);
+                cmd.Parameters.AddWithValue("@job", job);
+                cmd.Parameters.AddWithValue("@element", element);
+                cmd.Parameters.AddWithValue("@ai", ai);
+                cmd.Parameters.AddWithValue("@onoffbt", onoffbt);
+                cmd.Parameters.AddWithValue("@allball", JsonConvert.SerializeObject(allball, Formatting.None));
+                cmd.Parameters.AddWithValue("@center", JsonConvert.SerializeObject(center, Formatting.None));
+                cmd.Parameters.AddWithValue("@id", client.accID);
+
+                cmd.ExecuteNonQuery();
+            }
+            SavePoint();
+            if (!client.removeChr)
+                client.saveQuest();
+        }
+
+        public void loadPet()
+        {
+            string query = $"SELECT pet_sid, slot, location FROM " + TSServer.config.tbPet + " WHERE charid = @charId";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@charId", charId);
+                conn.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        int s = reader.GetInt32("slot");
+                        int sid = reader.GetInt32("pet_sid");
+                        if (s - 1 >= 0 && s - 1 < pet.Length)
+                        {
+                            pet[s - 1] = new TSPet(this, sid, (byte)s);
+                            pet[s - 1].loadPetDB();
+                        }
+                    }
+                }
+            }
+            nextPet();
+        }
+
+        public void changePetName(byte slot, byte[] newName)
+        {
+            if (pet[slot - 1] == null) return;
+            string newNameString = Encoding.UTF8.GetString(newName);
+            string query = $"UPDATE " + TSServer.config.tbPet + " SET `name` = @name WHERE pet_sid = @pet_sid";
+            using (var conn = new MySqlConnection(TSServer.config.dbConnectionString))
+            using (var cmd = new MySqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@name", newNameString);
+                cmd.Parameters.AddWithValue("@pet_sid", pet[slot - 1].pet_sid);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+            pet[slot - 1].name = newNameString;
+            pet[slot - 1].nameBytes = Encoding.UTF8.GetBytes(newNameString);
+            PacketCreator p = new PacketCreator(0xf, 9);
+            p.add32(client.accID);
+            p.add8(slot);
+            p.addBytes(pet[slot - 1].nameBytes);
+            reply(p.send());
+        }
+
         public DateTime changYear(DateTime date)
         {
             if (date.Year > 2400)
@@ -260,28 +699,21 @@ namespace TS_Server.Client
             }
             return date;
         }
+
         public void Add_Airtime(int cout)
         {
             if (ExpiryDate > DateTime.Now)
             {
-                DateTime oldCreationDate = ExpiryDate; // บันทึกเวลาเก่าไว้
+                DateTime oldCreationDate = ExpiryDate;
                 ExpiryDate = oldCreationDate.AddDays(cout);
-
             }
             else
             {
                 CreationDate = DateTime.Now;
                 ExpiryDate = CreationDate.AddDays(cout);
-                //ExpiryDate = CreationDate.AddMilliseconds(30);
-                // คำนวณจำนวนวันที่เหลืออยู่
-                //UpdateDaysLeft();
             }
-
-
-
         }
 
-        // ฟังก์ชันนี้จะถูกเรียกเมื่อต้องการอัปเดตจำนวนวันที่เหลืออยู่
         public void UpdateDaysLeft()
         {
             TimeSpan timeRemaining = ExpiryDate - DateTime.Now;
@@ -289,211 +721,24 @@ namespace TS_Server.Client
             announce("เหลือเวลาเล่น >> " + DaysLeft);
         }
 
-        // ฟังก์ชันนี้จะถูกเรียกเมื่อต้องการต่อเวลาเกม
         public void PlayGame()
         {
-            // ทำงานที่นี่...
-            // เมื่อเสร็จสิ้นการเล่นเกม ให้เรียก UpdateDaysLeft() เพื่ออัปเดตจำนวนวันที่เหลืออยู่
             UpdateDaysLeft();
         }
-        //public Character()
-        //{
-        //    // ในกรณีนี้เราจะกำหนดวันที่เติมเข้ามาทันทีเมื่อสร้างตัวละคร
-        //    CreationDate = DateTime.Now;
-        //    // กำหนดวันที่หมดอายุเป็น 30 วันหลังจากวันที่เติม
-        //    ExpiryDate = CreationDate.AddDays(30);
-        //    // คำนวณจำนวนวันที่เหลืออยู่
-        //    UpdateDaysLeft();
-        //}
+
         public void checktimeout()
         {
-            //Character myCharacter = new Character();
             Console.WriteLine($"วันที่เติม: {CreationDate}");
             Console.WriteLine($"วันหมดอายุ: {ExpiryDate}");
             Console.WriteLine($"วันที่เหลืออยู่: {DaysLeft} วัน");
-
-            // ตัวอย่างการเล่นเกม
-            //PlayGame();
-
             Console.WriteLine($"วันที่เหลืออยู่: {DaysLeft} วัน");
-
-            // คุณสามารถเรียก myCharacter.PlayGame() เพื่อต่อเวลาเกมเมื่อต้องการ
         }
-        public void loadCharDB()
-        {
-            //load db
-            var c = new TSMysqlConnection();
-            MySqlDataReader data = c.selectQuery("SELECT * FROM chars WHERE accountid = " + client.accID);
-            data.Read();
-            try
-            {
-                charId = data.GetInt32("id");
-                level = data.GetByte("level");
-                hp = data.GetInt32("hp");
-                hp = Math.Max(1, hp); // 0 HP ออกจากระบบถ้าตายในการสู้รบ
-                sp = data.GetInt32("sp");
-                mag = data.GetInt32("mag");
-                atk = data.GetInt32("atk");
-                def = data.GetInt32("def");
-                hpx = data.GetInt32("hpx");
-                spx = data.GetInt32("spx");
-                agi = data.GetInt32("agi");
-                FullHpMax = data.GetUInt16("fullhpmax");
-                FullSpMax = data.GetUInt16("fullspmax");
 
-
-                hp2 = data.GetInt32("hp2");
-                sp2 = data.GetInt32("sp2");
-                mag2 = data.GetInt32("mag2");
-                atk2 = data.GetInt32("atk2");
-                def2 = data.GetInt32("def2");
-                agi2 = data.GetInt32("agi2");
-                skill_point = data.GetInt32("sk_point");
-                stt_point = data.GetInt32("stt_point");
-
-                sex = data.GetByte("sex");
-                //ghost = data.GetByte("ghost");
-                //god = data.GetByte("god");
-
-                ghost = data.GetUInt16("ghost");
-                god = data.GetUInt16("god");
-                style = data.GetByte("style");
-                hair = data.GetByte("hair");
-                face = data.GetByte("face");
-
-                color1 = data.GetUInt32("color1");
-                color2 = data.GetUInt32("color2");
-                mapID = data.GetUInt16("map_id");
-                mapX = data.GetUInt16("map_x");
-                mapY = data.GetUInt16("map_y");
-                s_mapID = data.GetUInt16("s_map_id");
-                s_mapX = data.GetUInt16("s_map_x");
-                s_mapY = data.GetUInt16("s_map_y");
-
-                currentxp = data.GetInt32("exp");
-                totalxp = data.GetUInt32("exp_tot");
-                honor = data.GetUInt32("honor");
-
-                element = data.GetByte("element");
-                rb = data.GetByte("reborn");
-                job = data.GetByte("job");
-
-                gold = data.GetUInt32("gold");
-                gold_bank = data.GetUInt32("gold_bank");
-                name = data.GetString("name");
-
-                //loadEquipmentJson(JArray.Parse(!data.IsDBNull(data.GetOrdinal("equip")) ? data.GetString("equip") : "[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]"));
-                //inventory.loadContainerJson(JArray.Parse(!data.IsDBNull(data.GetOrdinal("inventory")) ? data.GetString("inventory") : "[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]"));
-                //storage.loadContainerJson(JArray.Parse(!data.IsDBNull(data.GetOrdinal("storage")) ? data.GetString("storage") : "[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,4,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]"));
-                //bag.loadContainerJson(JArray.Parse(!data.IsDBNull(data.GetOrdinal("bag")) ? data.GetString("bag") : "[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]"));
-                //skill = JsonConvert.DeserializeObject<ConcurrentDictionary<ushort, byte>>(!data.IsDBNull(data.GetOrdinal("skill")) ? data.GetString("skill") : "{}");
-                //skill_rb2 = JsonConvert.DeserializeObject<ushort[]>(!data.IsDBNull(data.GetOrdinal("skill_rb2")) ? data.GetString("skill_rb2") : "[0,0,0,0,0,0,0,0]");
-                //ball_point = JsonConvert.DeserializeObject<byte>(!data.IsDBNull(data.GetOrdinal("ball_point")) ? data.GetString("ball_point") : "0");
-                //ballList = JsonConvert.DeserializeObject<bool[]>(!data.IsDBNull(data.GetOrdinal("ballList")) ? data.GetString("ballList") : "[false,false,false,false,false,false,false,false,false,false,false,false]");
-                //hotkey = JsonConvert.DeserializeObject<ushort[]>(!data.IsDBNull(data.GetOrdinal("hotkey")) ? data.GetString("hotkey") : "[0,0,0,0,0,0,0,0,0,0]");
-                //armypoint = JsonConvert.DeserializeObject<ConcurrentDictionary<ushort, ushort>>(!data.IsDBNull(data.GetOrdinal("armypoint")) ? data.GetString("armypoint") : "{\"1\":0,\"2\":0,\"3\":0,\"4\":0,\"5\":0}"); // ค่ายทหาร             
-                //uesitemcout = JsonConvert.DeserializeObject<ConcurrentDictionary<ushort, ushort>>(!data.IsDBNull(data.GetOrdinal("uesitemcout")) ? data.GetString("uesitemcout") : "{}"); // การใช้ไอเท็ม   
-                //allball = JsonConvert.DeserializeObject<List<byte>>(!data.IsDBNull(data.GetOrdinal("allball")) ? data.GetString("allball") : "[0,0,0]");
-
-                boolequip = checkDBnull(data, "equip");
-                boolinventory = checkDBnull(data, "inventory");
-                boolstorage = checkDBnull(data, "storage");
-                boolbag = checkDBnull(data, "bag");
-                boolskill = checkDBnull(data, "skill");
-                boolskill_rb2 = checkDBnull(data, "skill_rb2");
-                boolball_point = checkDBnull(data, "ball_point");
-                boolballlist = checkDBnull(data, "ballList");
-                boolhotkey = checkDBnull(data, "hotkey");
-                //boolarmypoint = checkDBnull(data, "armypoint");
-                booluesitemcout = checkDBnull(data, "uesitemcout");
-                boolallball = checkDBnull(data, "allball");
-
-
-
-                pet_battle = (sbyte)data.GetByte("pet_battle");
-                ai = data.GetByte("ai");
-                onoffbt = data.GetByte("onoffbt");
-
-                //center = new TSCharCenter();
-                center = JsonConvert.DeserializeObject<TSCharCenter>(data.GetString("center"));
-                if (center == null)
-                    center = new TSCharCenter();
-                center.init(this);
-
-            }
-            catch (Exception e)
-            {
-                WriteLog.ErrorDB("At loadCharDB >> " + e);
-            }
-            finally
-            {
-                data.Close();
-                c.connection.Close();
-            }
-
-
-            hp_max = getHpMax();
-            sp_max = getSpMax();
-
-            hp_max = hp_max > 50000 ? 50000 : hp_max;
-            sp_max = hp_max > 50000 ? 50000 : sp_max;
-
-            hp = hp > hp_max ? hp_max : hp;
-            sp = sp > sp_max ? sp_max : sp;
-
-            //if (hp2 > 0)
-            //    hp_max = getHpMax() + hp2;
-            //else
-            //    hp_max = getHpMax();
-            //if (sp2 > 0)
-            //    sp_max = getSpMax() + sp2;
-            //else
-            //    sp_max = getSpMax();
-
-
-            xp_pow = rb == 0 ? 2.9 : rb == 1 ? 3.0 : 3.05;
-
-            //hp = hp > hp_max ? hp_max : hp;
-            //hp = sp > sp_max ? sp_max : sp;
-            /* if (!skill.ContainsKey(14001))
-                 skill.TryAdd(14001, 1);
-
-             if (!skill.ContainsKey(14015))
-                 skill.TryAdd(14015, 10);
-
-             if (!skill.ContainsKey(14021))
-                 skill.TryAdd(14021, 5);
-
-             if (!skill.ContainsKey(14023))
-                 skill.TryAdd(14023, 1);*/
-
-            //skill_point = 0;
-            //mag = Math.Max(mag, 300);
-            //atk = Math.Max(atk, 300);
-            //def = Math.Max(def, 300);
-            //agi = Math.Max(agi, 300);
-            //stt_point = 50;
-            //rb = 2;
-            //job = 1;
-            //hpx = 0;
-            //level = 1;
-
-            loadPet();
-
-
-
-            ////ในส่วยของกองทัพ--------------------------
-            // ChackArmy();
-            // loadArmyCity();
-            // sendArmyname();
-            ////------------------------------
-        }
         public bool checkDBnull(MySqlDataReader data, string str)
         {
             switch (str)
             {
                 case "equip":
-
                     if (data.GetString("equip") != "" && !data.IsDBNull(data.GetOrdinal("equip")))
                     {
                         loadEquipmentJson(JArray.Parse(data.GetString("equip")));
@@ -635,35 +880,6 @@ namespace TS_Server.Client
             return false;
         }
 
-        /*public void loadQuest()
-        {
-            var c = new TSMysqlConnection();
-            MySqlDataReader data = c.selectQuery("SELECT * FROM chars WHERE accountid = " + client.accID);
-            data.Read();
-
-            charId = data.GetInt32("id");
-            level = data.GetByte("level");
-        }*/
-
-        //public void loadItemstt() //โหลดการใช้งานไอเท็ม
-        //{
-        //    try
-        //    {
-        //        var c = new TSMysqlConnection();
-        //        MySqlDataReader data = c.selectQuery("SELECT * FROM " + TSServer.config.tbItemStt + " WHERE charID = " + client.accID);
-        //        data.Read();
-        //        numberID = data.GetInt32("numberID");
-        //        charID = data.GetInt32("charID");
-        //        itemID = data.GetInt32("itemID");
-        //        uescout = data.GetInt32("uescout");
-        //        data.Close();
-        //        c.connection.Close();
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        WriteLog.Error("loadMallpoint : " + e);
-        //    }
-        //}
         public void loadMallpoint()
         {
             try
@@ -673,8 +889,6 @@ namespace TS_Server.Client
                 data.Read();
                 gm = data.GetByte("gm");
                 point = data.GetInt32("point");
-                //point = 10000000; //ชั่วคราว
-                //Console.WriteLine("point " +point);
                 data.Close();
                 c.connection.Close();
             }
@@ -682,36 +896,29 @@ namespace TS_Server.Client
             {
                 WriteLog.Error("loadMallpoint : " + e);
             }
-
         }
 
         public void expitem()
         {
-
-
             for (int i = 0; i < equipment.Length; i++)
             {
                 if (ItemSoul.ItemSoulList.TryGetValue(equipment[i].Itemid, out var soulvar))
                 {
-                    //uint expitem = (uint)this.equipment[i]?.exp;
                     var p = new PacketCreator(0x17, 0x0b);
                     if (soulvar.itemID > 0)
                     {
-                        //equipment[i].exp += 100;
-
-                        p.add16(equipment[i].Itemid); //item id
-                        p.addByte(equipment[i].quantity); //quantity
-                                                          //p.addByte(0); //Unknow (Doben)
-                        p.addByte((byte)(equipment[i]?.elem_type ?? 0)); //คุณสมบัติอื่น (ธาตุ ดิน=01, น้ำ=02, ไฟ=03, ลม=04, จิต=05)
-                        p.addByte((byte)(100 + (byte)(equipment[i]?.elem_val ?? 0))); //ค่าจากคุณสมบัติอื่น (ต้อง +100 ด้วย)
-                        p.addByte((byte)(equipment[i]?.anti ?? 0)); //ต่อต้าน
-                        p.add32((uint)(equipment[i]?.exp ?? 0)); //ระดับเติบโตพลังวิญญาณ
+                        p.add16(equipment[i].Itemid);
+                        p.addByte(equipment[i].quantity);
+                        p.addByte((byte)(equipment[i]?.elem_type ?? 0));
+                        p.addByte((byte)(100 + (byte)(equipment[i]?.elem_val ?? 0)));
+                        p.addByte((byte)(equipment[i]?.anti ?? 0));
+                        p.add32((uint)(equipment[i]?.exp ?? 0));
                     }
                     reply(p.send());
                 }
-
             }
         }
+
         public void armor_exp_soulitem(int lv)
         {
             foreach (TSEquipment equ in equipment.Where(equ => equ != null && equ.level <= lv && equ.Itemid != 0))
@@ -728,17 +935,16 @@ namespace TS_Server.Client
                         {
                             int odl_elem_val = equ2.elem_val;
                             equ2.elem_val = i;
-
                             addEquipSoul(itemm.prop1, equ2.elem_val, odl_elem_val, 0);
                             addEquipSoul(itemm.prop2, equ2.elem_val, odl_elem_val, 0);
-                            //Logger.SystemWarning(Encoding.Default.GetString(ItemData.itemList[equ2.Itemid].name, 0, ItemData.itemList[equ2.Itemid].namelength) + " armor soullv " + equ2.elem_val);
                             refreshBonus();
                         }
                     }
                     sendEquip();
                 }
             }
-        } //ชุดวิญญาณ
+        }
+
         public void weapon_exp_soulitem(int lv)
         {
             foreach (TSEquipment equ in equipment.Where(equ => equ != null && equ.level <= lv && equ.Itemid != 0))
@@ -755,48 +961,42 @@ namespace TS_Server.Client
                         {
                             int odl_elem_val = equ2.elem_val;
                             equ2.elem_val = i;
-
                             addEquipSoul(itemm.prop1, equ2.elem_val, odl_elem_val, 0);
                             addEquipSoul(itemm.prop2, equ2.elem_val, odl_elem_val, 0);
-                            //Logger.SystemWarning(Encoding.Default.GetString(ItemData.itemList[equ2.Itemid].name, 0, ItemData.itemList[equ2.Itemid].namelength) + " weapon soullv " + equ2.elem_val);
                             refreshBonus();
                         }
                     }
                     sendEquip();
                 }
             }
-        } // อาวุธวิญญาณ
-
+        }
 
         public void StartAutosave()
         {
-            timerautosave.Interval = 30000; // 2นาที
-            //timerautosave.Interval = 60000; // 1นาที
-            //timerautosave.Interval = 120000; // 2นาที
-            //timerautosave.Interval = 300000; // 5 นาที
-            //timerautosave.Interval = 600000; // 10 นาที
-            //timerautosave.Interval = 1800000; // 30 นาที
+            timerautosave.Interval = 30000;
             timerautosave.Elapsed += autosaveDB;
             timerautosave.Start();
         }
+
         public void StopAutosave()
         {
             timerautosave.Stop();
         }
+
         public void StartAutoSpSub()
         {
             timerAutospSub.Interval = 10000;
             timerAutospSub.Elapsed += autoSpSub;
             timerAutospSub.Start();
         }
+
         public void StopAutoSpSup()
         {
             timerAutospSub.Stop();
-
         }
+
         public void Tike()
         {
-
             timer.Interval = 1000;
             if (client.outgame == true)
             {
@@ -806,14 +1006,14 @@ namespace TS_Server.Client
             {
                 timer.Start();
                 timer.Elapsed += timer_Elapsed;
-
             }
         }
+
         public void Toke()
         {
             timer.Stop();
-            //Cosslukshin();
         }
+
         public void lookTike()
         {
             looktime.Interval = 200;
@@ -827,11 +1027,13 @@ namespace TS_Server.Client
                 looktime.Start();
             }
         }
+
         public void lookToke()
         {
             looktime.Stop();
             Cosslukshin();
         }
+
         public void lukshin()
         {
             var p = new PacketCreator(0x0B, 07);
@@ -839,6 +1041,7 @@ namespace TS_Server.Client
             p.addByte(0xff);
             client.reply(p.send());
         }
+
         public void Cosslukshin()
         {
             var p = new PacketCreator(0x0B, 07);
@@ -846,21 +1049,23 @@ namespace TS_Server.Client
             p.addByte(0x00);
             client.reply(p.send());
         }
+
         public void checkcombotimeTick()
         {
             combotime.Interval = 3600000;
             combotime.Start();
             combotime.Elapsed += timer_ElapsedCombotimr;
         }
+
         public void checkEndAirtime()
         {
             checkEndtime.Interval = 1000;
             checkEndtime.Start();
             checkEndtime.Elapsed += timer_ElapsedEnditem;
         }
+
         public void timer_ElapsedEnditem(object sedr, System.Timers.ElapsedEventArgs e)
         {
-            //int.TryParse(DaysLeft.ToString(), out var val1);
             if (DateAndTime.Now > ExpiryDate && gm != 1)
             {
                 announce("ตัดการเชื่อมต่อเนื่องจาก AirTime หมด");
@@ -878,14 +1083,17 @@ namespace TS_Server.Client
                 checkEndtime.Stop();
             }
         }
+
         public void endtimetoke()
         {
             checkEndtime.Stop();
         }
+
         public void checkcombotimeToke()
         {
             combotime.Stop();
         }
+
         public void timer_ElapsedCombotimr(object sedr, EventArgs e)
         {
             if (point < 100 && gm == 2)
@@ -913,9 +1121,9 @@ namespace TS_Server.Client
                 sendpoint();
             }
         }
+
         public void timer_Elapsed(object sedr, EventArgs e)
         {
-            //Console.WriteLine("AI RUN >> " + client.accID);
             if (client.battle == null)
             {
                 try
@@ -931,13 +1139,11 @@ namespace TS_Server.Client
                         var EvntID = x.Where(xx => xx.npcForeast == 1).ToArray();
                         if (EvntID.Length > 0)
                         {
-                            Random ran = new Random();
-                            var EvnID = EvntID[RandomGen.getInt(0, EvntID.Length)].EventId[0];
+                            var EvnID = EvntID[GetRandomIntStatic(0, EvntID.Length)].EventId[0];
                             StepQ[] steps = EveData.listStepQust[client.map.mapid].Where(item => item.EvenID == EvnID && item.resBattle == 0).ToArray();
                             if (client.battle == null && steps != null)
                             {
-                                // Console.WriteLine("eveid " + EvnID);
-                                client.BattlecurrentStep = steps[ran.Next(0, steps.Length)];
+                                client.BattlecurrentStep = steps[GetRandomIntStatic(0, steps.Length)];
                                 client.processStepEncouter(client);
                             }
                         }
@@ -946,16 +1152,15 @@ namespace TS_Server.Client
                             offlinemodeOff();
                             timer.Stop();
                         }
-
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("AI BOT " + ex.ToString());
                 }
-
             }
         }
+
         public void offlinemodeOff()
         {
             announce("ปิดใช้โหมด OFFLINE เนื่องจากไม่ได้อยู่ในป่า");
@@ -964,7 +1169,7 @@ namespace TS_Server.Client
             client.aicombo = false;
             client.autosell = false;
             client.sellitem = 0;
-            autobotout = false; //สั่งให้บอทเติมเลือด
+            autobotout = false;
             if (party != null)
             {
                 for (int n = 0; n < party.member.Count; n++)
@@ -976,15 +1181,14 @@ namespace TS_Server.Client
                         party.member[n].client.autosell = false;
                         party.member[n].client.sellitem = 0;
                     }
-
                 }
             }
         }
+
         public void winautobot()
         {
             if (autobotout)
             {
-                //lukshin();
                 setHp(getHpMax());
                 refresh(hp, TSConstants._HP);
                 setSp(getSpMax());
@@ -996,7 +1200,6 @@ namespace TS_Server.Client
                     pet.refresh(pet.hp, TSConstants._HP);
                     pet.setSp(pet.getSpMax());
                     pet.refresh(pet.sp, TSConstants._SP);
-
                 }
                 if (party != null)
                 {
@@ -1016,15 +1219,12 @@ namespace TS_Server.Client
                                 pet.setSp(pet.getSpMax());
                                 pet.refresh(pet.sp, TSConstants._SP);
                             }
-                            //if (client.battle == null)
-                            //party.member[n].lukshin();
                         }
-
                     }
-
                 }
             }
         }
+
         public void winbot()
         {
             if (botout)
@@ -1034,7 +1234,6 @@ namespace TS_Server.Client
                 refresh(hp, TSConstants._HP);
                 setSp(getSpMax());
                 refresh(sp, TSConstants._SP);
-
                 if (this.pet_battle != -1)
                 {
                     TSPet pet = this.pet[this.pet_battle];
@@ -1042,14 +1241,13 @@ namespace TS_Server.Client
                     pet.refresh(pet.hp, TSConstants._HP);
                     pet.setSp(pet.getSpMax());
                     pet.refresh(pet.sp, TSConstants._SP);
-
                 }
             }
         }
+
         public void hpsp()
         {
             if (ai == 1 && (point > 9 || gm == 1))
-
             {
                 if (gm != 1)
                 {
@@ -1066,7 +1264,6 @@ namespace TS_Server.Client
                 refresh(hp, TSConstants._HP);
                 setSp(getSpMax());
                 refresh(sp, TSConstants._SP);
-
                 if (this.pet_battle != -1)
                 {
                     TSPet pet = this.pet[this.pet_battle];
@@ -1074,7 +1271,6 @@ namespace TS_Server.Client
                     pet.refresh(pet.hp, TSConstants._HP);
                     pet.setSp(pet.getSpMax());
                     pet.refresh(pet.sp, TSConstants._SP);
-
                 }
             }
             else
@@ -1083,9 +1279,9 @@ namespace TS_Server.Client
                 client.saveChrtoDB();
             }
         }
+
         public void autosell()
         {
-
             foreach (var item in inventory.items)
             {
                 if (item == null) continue;
@@ -1097,7 +1293,6 @@ namespace TS_Server.Client
                     total_hp_potion_used = quantity;
                     gold += (quantity * hpItems.SellingPrice);
                     inventory.items[item.slot - 1] = null;
-
                 }
                 else if (client.sellitem == 1 && item.quantity == 50 || item.Itemid == 23024)
                 {
@@ -1109,28 +1304,20 @@ namespace TS_Server.Client
                 if (total_hp_potion_used > 0)
                 {
                     client.getChar().sendGold();
-                    announce("ขายขยะ >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
+                    announce("ขายขยะ >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
                     reply(new PacketCreator(new byte[] { 0x17, 9, item.slot, total_hp_potion_used }).send());
                     reply(new PacketCreator(0x17, 0xf).send());
                     inventory.nextSlot();
                 }
-
-                //if (point >= 2000 &&  !new byte[] { 40, 50, 60, }.Contains(hpItems.unk3))
-                //{
-                //    point -= 500;
-                //    client.getChar().sendpoint();
-                //    inventory.addItem(23206, 1, true);
-                //    announce("ทำการซื้อตรา >> " + Encoding.Default.GetString(ItemData.itemList[23206].name, 0, ItemData.itemList[23206].namelength) + " จำนวน " + 1 + " ชิ้น");
-                //}
                 if (((equipment[5] != null && equipment[5].Itemid == 23024) || equipment[5] == null) && new byte[] { 40, 50, 60, }.Contains(hpItems.unk3))
                 {
                     inventory.items[item.slot - 1].equip?.equipOnChar();
-                    announce("สลับตรา >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength));
+                    announce("สลับตรา >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength));
                     inventory.nextSlot();
-
                 }
             }
         }
+
         public void autohpspWitItem()
         {
             double percentage_hp = ((double)hp / hp_max) * 100;
@@ -1149,7 +1336,6 @@ namespace TS_Server.Client
                             byte quantity = item.quantity;
                             for (int i = 0; i < quantity; i++)
                             {
-
                                 setHp(hpItems.prop1_val);
                                 inventory.items[item.slot - 1].quantity--;
                                 total_hp_potion_used++;
@@ -1158,12 +1344,11 @@ namespace TS_Server.Client
                                 if (hp >= hp_max)
                                     break;
                             }
-
                         }
                     }
                     if (total_hp_potion_used > 0)
                     {
-                        announce("กินยา HP >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
+                        announce("กินยา HP >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
                         reply(new PacketCreator(new byte[] { 0x17, 9, item.slot, total_hp_potion_used }).send());
                         reply(new PacketCreator(0x17, 0xf).send());
                     }
@@ -1174,7 +1359,6 @@ namespace TS_Server.Client
             {
                 foreach (var item in inventory.items)
                 {
-
                     if (item == null) continue;
                     byte total_sp_potion_used = 0;
                     var hpItems = ItemData.itemList[item.Itemid];
@@ -1185,7 +1369,6 @@ namespace TS_Server.Client
                             byte quantity = item.quantity;
                             for (int i = 0; i < quantity; i++)
                             {
-                                //sp += hpItems.prop1_val;
                                 setSp(hpItems.prop1_val);
                                 inventory.items[item.slot - 1].quantity--;
                                 total_sp_potion_used++;
@@ -1203,7 +1386,6 @@ namespace TS_Server.Client
                             byte quantity = item.quantity;
                             for (int i = 0; i < quantity; i++)
                             {
-                                //sp += hpItems.prop2_val;
                                 setSp(hpItems.prop2_val);
                                 inventory.items[item.slot - 1].quantity--;
                                 total_sp_potion_used++;
@@ -1216,7 +1398,7 @@ namespace TS_Server.Client
                     }
                     if (total_sp_potion_used > 0)
                     {
-                        announce("กินยา SP >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_sp_potion_used);
+                        announce("กินยา SP >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_sp_potion_used);
                         reply(new PacketCreator(new byte[] { 0x17, 9, item.slot, total_sp_potion_used }).send());
                         reply(new PacketCreator(0x17, 0xf).send());
                     }
@@ -1251,7 +1433,7 @@ namespace TS_Server.Client
                         }
                         if (total_hp_potion_used > 0)
                         {
-                            announce("ขุนพลกินยา HP >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
+                            announce("ขุนพลกินยา HP >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_hp_potion_used);
                             reply(new PacketCreator(new byte[] { 0x17, 9, item.slot, total_hp_potion_used }).send());
                             reply(new PacketCreator(0x17, 0xf).send());
                         }
@@ -1301,7 +1483,7 @@ namespace TS_Server.Client
                         }
                         if (total_sp_potion_used > 0)
                         {
-                            announce("ขุนกินยา SP >> " + Encoding.Default.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_sp_potion_used);
+                            announce("ขุนกินยา SP >> " + Encoding.UTF8.GetString(hpItems.name, 0, hpItems.namelength) + " จำนวน >> " + total_sp_potion_used);
                             reply(new PacketCreator(new byte[] { 0x17, 9, item.slot, total_sp_potion_used }).send());
                             reply(new PacketCreator(0x17, 0xf).send());
                         }
@@ -1311,9 +1493,9 @@ namespace TS_Server.Client
             }
             inventory.nextSlot();
         }
+
         public void getspForsub()
         {
-
             TSClient subleader_Client = TSServer.getInstance().getPlayerById(party.subleader_id);
             if (subleader_Client != null)
             {
@@ -1325,7 +1507,6 @@ namespace TS_Server.Client
                     TSPet pet = this.pet[this.pet_battle];
                     pet.setSp(amont);
                     pet.refresh(pet.sp, TSConstants._SP);
-
                 }
                 if (party != null)
                 {
@@ -1346,12 +1527,14 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public bool isLeader()
         {
             if (client.accID == this.party.leader_id)
                 return true;
             return false;
         }
+
         public void getspForsub2()
         {
             if (party != null)
@@ -1365,16 +1548,14 @@ namespace TS_Server.Client
                     for (int i = 0; i < 4; i++)
                         for (int j = 0; j < 5; j++)
                         {
-                            //Thread.Sleep(50);
                             if (client?.battle?.position[i][j]?.chr != null)
                             {
                                 PacketCreator p = new PacketCreator(0x32, 1);
                                 p.add16(15);
                                 p.addByte((byte)i); p.addByte((byte)j);
                                 p.add16(20003);
-
                                 p.add8((byte)1);
-                                p.add8(1); //nb of target affected
+                                p.add8(1);
                                 p.addByte((byte)i); p.addByte((byte)j);
                                 p.addByte(1);
                                 p.addByte(0);
@@ -1382,12 +1563,9 @@ namespace TS_Server.Client
                                 p.addByte(0x1a);
                                 p.add16((ushort)amont);
                                 p.addByte(0);
-
                                 byte[] pCommand = p.send();
                                 client?.battle?.battleBroadcast(pCommand);
                                 client?.battle?.sterm(pCommand);
-
-                                //client?.battle?.battleBroadcast(p.send());
                             }
                             else if (client?.battle?.position[i][j]?.pet != null)
                             {
@@ -1395,9 +1573,8 @@ namespace TS_Server.Client
                                 p.add16(15);
                                 p.addByte((byte)i); p.addByte((byte)j);
                                 p.add16(20003);
-
                                 p.add8((byte)1);
-                                p.add8(1); //nb of target affected
+                                p.add8(1);
                                 p.addByte((byte)i); p.addByte((byte)j);
                                 p.addByte(1);
                                 p.addByte(0);
@@ -1405,22 +1582,16 @@ namespace TS_Server.Client
                                 p.addByte(0x1a);
                                 p.add16((ushort)amont);
                                 p.addByte(0);
-
                                 byte[] pCommand = p.send();
                                 client?.battle?.battleBroadcast(pCommand);
                                 client?.battle?.sterm(pCommand);
-
-                                //client?.battle?.battleBroadcast(p.send());
                             }
-
-
                         }
                     if (this.pet_battle != -1)
                     {
                         TSPet pet = this.pet[this.pet_battle];
                         pet.setSp(amont);
                         pet.refresh(pet.sp, TSConstants._SP);
-
                     }
                     if (client?.getChar().party != null)
                     {
@@ -1428,7 +1599,6 @@ namespace TS_Server.Client
                         {
                             if (party?.member[n]?.client.accID != client?.accID)
                             {
-
                                 party?.member[n]?.setSp(amont);
                                 party?.member[n]?.refresh(party.member[n].sp, TSConstants._SP);
                                 if (party?.member[n]?.pet_battle != -1)
@@ -1443,14 +1613,14 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public static NpcOnMapInfo GetRandomNpcOnMap()
         {
-
-
             Random rnd = new Random();
             var key = NpcOnMapData.listKeysNpcOnMap[rnd.Next(NpcOnMapData.listKeysNpcOnMap.Count)];
             return NpcOnMapData.npcOnMapList[(Key_NpcOnMap)key];
         }
+
         public void SwitchPk(byte[] data)
         {
             if (PkSwich == false)
@@ -1460,7 +1630,6 @@ namespace TS_Server.Client
                 p0.add8(data[2]);
                 p0.addZero(2);
                 client.reply(p0.send());
-                //Console.WriteLine("เปิด PK "+PkSwich);
             }
             else
             {
@@ -1471,6 +1640,7 @@ namespace TS_Server.Client
                 client.reply(p0.send());
             }
         }
+
         public void SwitchJam(byte[] data)
         {
             if (JamSwich == false)
@@ -1480,7 +1650,6 @@ namespace TS_Server.Client
                 p0.add8(data[2]);
                 p0.addZero(2);
                 client.reply(p0.send());
-                //Console.WriteLine("เปิด PK "+PkSwich);
             }
             else
             {
@@ -1491,6 +1660,7 @@ namespace TS_Server.Client
                 client.reply(p0.send());
             }
         }
+
         public void loadSwitchPk()
         {
             PacketCreator p0 = new PacketCreator(0x21, 2);
@@ -1498,6 +1668,7 @@ namespace TS_Server.Client
             p0.addZero(2);
             client.reply(p0.send());
         }
+
         public void exitStreamBattle()
         {
             if (streamBattleId > 0)
@@ -1507,11 +1678,9 @@ namespace TS_Server.Client
                     TSClient c = TSServer.getInstance().getPlayerById(streamBattleId);
                     if (c != null && c.battle != null && c.battle.streamers != null)
                     {
-                        //Console.WriteLine("remove streamer " + c.battle.streamers.Count);
                         c.battle.streamers.Remove(client.accID);
                     }
                     streamBattleId = 0;
-
                     PacketCreator p = new PacketCreator(0x0b);
                     p.addByte(0);
                     p.add32(client.accID);
@@ -1520,10 +1689,10 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public void loadPet()
         {
             var c = new TSMysqlConnection();
-
             MySqlDataReader data = c.selectQuery("SELECT pet_sid, slot, location FROM pet WHERE charid = " + charId);
             try
             {
@@ -1533,9 +1702,7 @@ namespace TS_Server.Client
                     int sid = data.GetInt32("pet_sid");
                     pet[s - 1] = new TSPet(this, sid, (byte)s);
                     pet[s - 1].loadPetDB();
-                    //Console.WriteLine("pet " + pet[s - 1].NPCid + " name " + pet[s - 1].name);
                 }
-                //data.Close();
             }
             catch (Exception e)
             {
@@ -1546,42 +1713,9 @@ namespace TS_Server.Client
                 data.Close();
                 c.connection.Close();
             }
-
-            //while (next_pet < 4)
-            //{
-            //    if (pet[next_pet] == null) break;
-            //    next_pet++;
-            //}
             nextPet();
         }
 
-        /* public void initChar(byte[] data, byte[] name)
-         {
-             //update pass1 pass2
-             string pass1 = PacketReader.readString(data, 22, data[21]);
-             string pass2 = PacketReader.readString(data, 22 + pass1.Length + 1, data[22 + pass1.Length]);
-
-             var c = new TSMysqlConnection();
-
-             c.updateQuery("UPDATE account SET password = '" + pass1 + "', password2 = '" + pass2 + "' WHERE id = " +
-                           client.accID);
-             c.connection.Open();
-             var cmd = new MySqlCommand();
-             cmd.Connection = c.connection;
-             cmd.CommandText = "INSERT INTO chars (accountid, name, mag, atk, def, hpx, spx, agi, sex, style, hair, face, color1, color2, element) "
-                           + "VALUES (" + client.accID + ", @name ," + data[15] + "," + data[16] + "," + data[17] +
-                           "," + data[18] + ","
-                           + data[19] + "," + data[20] + "," + data[2] + "," + data[3] + "," + data[4] + "," + data[5] +
-                           "," + PacketReader.read32(data, 6) + "," + PacketReader.read32(data, 10) + "," + data[14] +
-                           ");";
-             cmd.Prepare();
-             //cmd.Parameters.AddWithValue("@name", name);
-             cmd.Parameters.AddWithValue("@name", Encoding.Default.GetString(name));
-             cmd.ExecuteNonQuery();
-             c.connection.Close();
-
-             charId = c.getLastId("chars");
-         }*/
         public void initChar(byte[] data, byte[] name)
         {
             loadAirtime();
@@ -1592,90 +1726,54 @@ namespace TS_Server.Client
                 StartDate = CreationDate;
             }
             else
+            {
                 CreationDate = StartDate;
-
+            }
             string ctime = CreationDate.ToString("yyyy-MM-dd HH:mm:ss");
             string extime = ExpiryDate.ToString("yyyy-MM-dd HH:mm:ss");
-
             string pass1 = PacketReader.readString(data, 22, data[21]);
             string pass2 = PacketReader.readString(data, 22 + pass1.Length + 1, data[22 + pass1.Length]);
-
-            // ใช้ parameterized query สำหรับ update account
-            string updateAccountQuery = "UPDATE " + TSServer.config.tbAccount +
-                                        " SET password = @pass1, password2 = @pass2, start_date_time = @start, end_date_time = @end WHERE id = @id";
-
-            using (var c = new TSMysqlConnection())
-            using (var cmd = new MySqlCommand(updateAccountQuery, c.connection))
-            {
-                cmd.Parameters.AddWithValue("@pass1", pass1);
-                cmd.Parameters.AddWithValue("@pass2", pass2);
-                cmd.Parameters.AddWithValue("@start", ctime);
-                cmd.Parameters.AddWithValue("@end", extime);
-                cmd.Parameters.AddWithValue("@id", client.accID);
-
-                c.connection.Open();
-                cmd.ExecuteNonQuery();
-            }
-
-            // Insert new character ด้วย parameterized query
-            string insertQuery = @"INSERT INTO " + TSServer.config.tbChars +
-                @" (accountid, name, mag, atk, def, hpx, spx, agi, sex, style, hair, face, color1, color2, 
-           element, map_id, map_x, map_y, s_map_id, s_map_x, s_map_y, equip, inventory, storage, bag, 
-           allball, ball_point, skill, skill_rb2, balllist, hotkey, uesitemcout) 
-        VALUES (@accId, @name, @mag, @atk, @def, @hpx, @spx, @agi, @sex, @style, @hair, @face, 
-                @color1, @color2, @element, @mapId, @mapX, @mapY, @sMapId, @sMapX, @sMapY, 
-                @equip, @inventory, @storage, @bag, @allball, @ballPoint, @skill, @skillRb2, 
-                @balllist, @hotkey, @uesitemcout)";
-
-            using (var c = new TSMysqlConnection())
-            using (var cmd = new MySqlCommand(insertQuery, c.connection))
-            {
-                cmd.Parameters.AddWithValue("@accId", client.accID);
-                cmd.Parameters.AddWithValue("@name", Encoding.Default.GetString(name));
-                cmd.Parameters.AddWithValue("@mag", data[15]);
-                cmd.Parameters.AddWithValue("@atk", data[16]);
-                cmd.Parameters.AddWithValue("@def", data[17]);
-                cmd.Parameters.AddWithValue("@hpx", data[18]);
-                cmd.Parameters.AddWithValue("@spx", data[19]);
-                cmd.Parameters.AddWithValue("@agi", data[20]);
-                cmd.Parameters.AddWithValue("@sex", data[2]);
-                cmd.Parameters.AddWithValue("@style", data[3]);
-                cmd.Parameters.AddWithValue("@hair", data[4]);
-                cmd.Parameters.AddWithValue("@face", data[5]);
-                cmd.Parameters.AddWithValue("@color1", PacketReader.read32(data, 6));
-                cmd.Parameters.AddWithValue("@color2", PacketReader.read32(data, 10));
-                cmd.Parameters.AddWithValue("@element", data[14]);
-                cmd.Parameters.AddWithValue("@mapId", 10817);
-                cmd.Parameters.AddWithValue("@mapX", 442);
-                cmd.Parameters.AddWithValue("@mapY", 758);
-                cmd.Parameters.AddWithValue("@sMapId", 12003);
-                cmd.Parameters.AddWithValue("@sMapX", 500);
-                cmd.Parameters.AddWithValue("@sMapY", 500);
-
-                // ค่าเริ่มต้น JSON
-                cmd.Parameters.AddWithValue("@equip", "[[0,0,0,0,0,0,0,0,0,0],[2,19737,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]");
-                cmd.Parameters.AddWithValue("@inventory", "[]");
-                cmd.Parameters.AddWithValue("@storage", "[]");
-                cmd.Parameters.AddWithValue("@bag", "[]");
-                cmd.Parameters.AddWithValue("@allball", "'[0,0,0]'");
-                cmd.Parameters.AddWithValue("@ballPoint", 0);
-                cmd.Parameters.AddWithValue("@skill", "{}");
-                cmd.Parameters.AddWithValue("@skillRb2", "[0,0,0,0,0,0,0,0]");
-                cmd.Parameters.AddWithValue("@balllist", "[false,false,false,false,false,false,false,false,false,false,false,false]");
-                cmd.Parameters.AddWithValue("@hotkey", "[0,0,0,0,0,0,0,0,0,0]");
-                cmd.Parameters.AddWithValue("@uesitemcout", "{}");
-
-                c.connection.Open();
-                cmd.ExecuteNonQuery();
-                charId = (int)cmd.LastInsertedId;
-            }
+            var c = new TSMysqlConnection();
+            string ball = "0";
+            string sk = "'{}'";
+            armypoint = new ConcurrentDictionary<ushort, ushort>();
+            armypoint.TryAdd(1, 0);
+            armypoint.TryAdd(2, 0);
+            armypoint.TryAdd(3, 0);
+            armypoint.TryAdd(4, 0);
+            armypoint.TryAdd(5, 0);
+            string uesitemCout = "'{}'";
+            string sk_rb2 = "'[0,0,0,0,0,0,0,0]'";
+            string ball_l = "'[false,false,false,false,false,false,false,false,false,false,false,false]'";
+            string allball = "'[0,0,0]'";
+            string hot = "'[0,0,0,0,0,0,0,0,0,0]'";
+            string Newquip = "'[[0,0,0,0,0,0,0,0,0,0],[2,19737,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]'";
+            string mapid = "10817";
+            string mapx = "442";
+            string mapy = "758";
+            string smapid = "12003";
+            string smapx = "500";
+            string smapy = "500";
+            string add = "'[]'";
+            c.updateQuery("UPDATE " + TSServer.config.tbAccount + " SET password = '" + pass1 + "', password2 = '" + pass2 + "', start_date_time = '" + ctime + "', end_date_time = '" + extime + "' WHERE id = " + client.accID);
+            c.connection.Open();
+            var cmd = new MySqlCommand();
+            cmd.Connection = c.connection;
+            cmd.CommandText = "INSERT INTO " + TSServer.config.tbChars + " (accountid, name, mag, atk, def, hpx, spx, agi, sex, style, hair, face, color1, color2, element, map_id, map_x, map_y, s_map_id, s_map_x, s_map_y, equip, inventory, storage, bag, allball, ball_point , skill , skill_rb2 , balllist, hotkey , uesitemcout) "
+                          + "VALUES (" + client.accID + ", @name ," + data[15] + "," + data[16] + "," + data[17] + "," + data[18] + "," + data[19] + "," + data[20] + "," + data[2] + "," + data[3] + "," + data[4] + "," + data[5] +
+                          "," + PacketReader.read32(data, 6) + "," + PacketReader.read32(data, 10) + "," + data[14] + "," + mapid + "," + mapx + "," + mapy + "," + smapid + "," + smapx + "," + smapy + "," + Newquip + "," + add + "," + add + "," + add + "," + allball + "," + ball + "," + sk + "," + sk_rb2 + "," + ball_l + "," + hot + "," + uesitemCout + ");";
+            cmd.Prepare();
+            cmd.Parameters.AddWithValue("@name", Encoding.UTF8.GetString(name));
+            cmd.ExecuteNonQuery();
+            c.connection.Close();
+            charId = c.getLastId(TSServer.config.tbChars);
         }
+
         public void saveAirtime()
         {
             var c = new TSMysqlConnection();
-            string ctime = CreationDate.ToString("yyyy-MM-dd hh:mm:ss tt");
-            string extime = ExpiryDate.ToString("yyyy-MM-dd hh:mm:ss tt");
-
+            string ctime = CreationDate.ToString("yyyy-MM-dd HH:mm:ss");
+            string extime = ExpiryDate.ToString("yyyy-MM-dd HH:mm:ss");
             c.connection.Open();
             var cmd = new MySqlCommand();
             cmd.Connection = c.connection;
@@ -1686,87 +1784,48 @@ namespace TS_Server.Client
             cmd.Parameters.AddWithValue("@end_date_time", extime);
             cmd.ExecuteNonQuery();
             c.connection.Close();
-
         }
 
         public void loginChar()
         {
             loadCharDB();
-            loadAirtime(); // โหลดเวลาที่จะเล่นได้ดึง
-
+            loadAirtime();
             if (TSServer.config.debugmode == true)
             {
-                checktimeout(); // เช็คเวลา
+                checktimeout();
             }
-
-
-
             var sqlc = new TSMysqlConnection();
-            sqlc.updateQuery("UPDATE " + TSServer.config.tbAccount + " SET lastlogin = '" + DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss tt") + "' WHERE id = " + client.accID);
-            //sqlc.connection.Close();
-
-            //addSummonSkill(10);
-
+            sqlc.updateQuery("UPDATE " + TSServer.config.tbAccount + " SET lastlogin = '" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "' WHERE id = " + client.accID);
             client.online = true;
-            //client.loggedin(client.accID, 1);//เพิมสถานะล็อกอิน 1
-            //
-
-            //refreshChr();
-
             reply(new PacketCreator(new byte[] { 0x14, 0x08 }).send());
             reply(new PacketCreator(new byte[] { 0x14, 0x21, 0x00 }).send());
-
             sendLook(false);
-            //refreshBonus();
             sendInfo();
             sendPetInfo();
-
             reply(new PacketCreator(new byte[] { 0x21, 2, 0, 0 }).send());
-
-            //0x17, 5 for invent, 0x1e, 0x1 for storage, 0x017, 0x2f for bag
             inventory.sendItems(0x17, 5);
             bag.sendItems(0x17, 0x2f);
             storage.sendItems(0x1e, 1);
             sendEquip();
-
             client.UImportant();
             client.AllowMove();
-
             sendGold();
-            //announce("สวัสดีจร้า");
             announce(TSServer.config.welcomeMessage);
             sendHotkey();
-
             loadMallpoint();
-            //point = 10000000; //พร้อยมอลใส่ชั่วคราว
-
             sendVoucher();
             loadSwitchPk();
-            refreshFull(TSConstants._UNOWK, 1, 1); //???? ที่เพิ่ม?
-
-            //------ระบบกิล (ต้องโหลดก่อน addPlayer เพราะ client ต้อง cache icon ก่อนได้ look packet)-------------
-            // โหลด guild_id จาก memory (guildMemberList ถูกโหลดตอนเซิร์ฟเริ่ม)
+            refreshFull(TSConstants._UNOWK, 1, 1);
             if (GuildData.guildMemberList.ContainsKey(client.accID))
             {
                 guild_id = GuildData.guildMemberList[client.accID].guildId;
                 GuildSystem.OnPlayerLogin(this);
             }
-            // ส่ง icon ทุกกิลให้ client cache (แม้คนไม่มีกิล ก็ต้องเห็นธงคนอื่น)
-            // *** ต้องส่ง ICON ก่อน addPlayer เพราะ addPlayer ส่ง sendLookForOther ที่มี guild_id ***
-            // *** ถ้า client ยังไม่มี icon cache → จะไม่แสดงธง ***
             GuildSystem.SendAllGuildIcons(this);
-            //-------------------------
-
-            //ส่วนของการโหลดเควส
-            //------------------------
             client.loadQuestDB();
             client.refreshQuestTask();
             client.refreshDontTask();
-            //---------------------------
-
             TSServer.getInstance().addPlayer(client);
-
-
             if (client.map != null)
             {
                 foreach (TSClient c in client.map.listPlayers.Values)
@@ -1774,13 +1833,7 @@ namespace TS_Server.Client
                     sendOtherPlayerDoing(c);
                 }
             }
-            //ActivityHandler.chr = this;
-            //ActivityHandler.c = client;
-
-
-
-            EventActivityTime();//แสดงข้อความเวลากิจกรรม
-            //client.towarp(client, 8);
+            EventActivityTime();
             announce_in_server();
             addReNewchr();
             UpdateDaysLeft();
@@ -1788,10 +1841,28 @@ namespace TS_Server.Client
             {
                 TimeQuest.getInstance().QustTime(client);
             }
-            checkEndAirtime(); // สั่งเช็คเวลาAirtime เป็น timer
+            checkEndAirtime();
             replyMagtoChr();
-            //StartAutosave(); //ออโต้ save DB
             ActivityHandler.removeQ(client);
+        }
+
+        public async void addReNewchr()
+        {
+            if (client.map.mapid == 10817)
+            {
+                await Task.Delay(500);
+                addPet(11144, 0, 1);
+                PacketCreator p = new PacketCreator(0x02);
+                p.add8(0x00);
+                p.add32(0);
+                p.addBytes(Encoding.UTF8.GetBytes("ยินดีต้อนรับคุณ " + name + " เข้าสู่ Test Server TS Online ขอให้สนุกกับการผจญภัยนะครับ"));
+                byte[] textByte = p.send();
+                foreach (TSClient c in TSServer.listPlayers.Values)
+                {
+                    c.reply(textByte);
+                }
+                client.savetoDB();
+            }
         }
 
         public void replyMagtoChr()
@@ -1825,6 +1896,7 @@ namespace TS_Server.Client
             if (boolPetequip)
                 announce("อุปกรณ์สวมใส่ขุนพลของคุณมีปัณหาเราจะไม่มีการ Save ค่าใดๆที่เกี่ยวกับ อุปกรณ์สวมใส่ขุนพล ขณะออนไลน์ โปรดแจ้ง GM ");
         }
+
         public void announce_in_server()
         {
             announce("ดูคำสั่งทั้งหมดพิม /help");
@@ -1867,51 +1939,14 @@ namespace TS_Server.Client
                 announce("ปิดใช้ combo 100 %");
             }
         }
-        public void addReNewchr()
-        {
-            if (client.map.mapid == 10817)
-            {
-                Thread.Sleep(500);
-                addPet(11144, 0, 1);
-                //Thread.Sleep(500);
-                //addPet(18018, 0, 1);
-                //Thread.Sleep(500);
-                //addPet(22029, 0, 1);
-                //Thread.Sleep(500);
-                //addPet(11053, 0, 1);
-                //Thread.Sleep(500);
-                //addPet(12043, 0, 1);
-                //Thread.Sleep(500);
-                //inventory.addItem(46375, 1, true);
-                //Thread.Sleep(500);
-                //skill.TryAdd(14023, 1);
-                //refreshskill(14023, 1);
-                //Thread.Sleep(500);
-                //skill.TryAdd(14034, 1);
-                //refreshskill(14034, 1);
-                //addSkillTestServer();
 
-                PacketCreator p = new PacketCreator(0x02);
-                p.add8(0x00);
-                p.add32(0);
-                p.addBytes(Encoding.Default.GetBytes("ยินดีต้อนรับคุณ " + name + " เข้าสู่ Test Server TS Online ขอให้สนุกกับการผจนภัยนะครับ"));
-                byte[] textByte = p.send();
-                foreach (TSClient c in TSServer.listPlayers.Values)
-                {
-                    c.reply(textByte);
-                }
-                client.savetoDB();
-
-            }
-        }
         public void autosaveDB(object sedr, EventArgs e)
         {
-            //Console.WriteLine("Auto Save DB ID " + client.accID);
             timerautosave.Stop();
             client.savetoDB();
-            //Logger.SystemMessage("Auto Save DB ID " + client.accID);
             timerautosave.Start();
         }
+
         public void autoSpSub(object sedr, EventArgs e)
         {
             if (party != null && party.subleader_id > 0)
@@ -1924,30 +1959,30 @@ namespace TS_Server.Client
                 autospSub = false;
             }
         }
+
         public void EventActivityTime()
         {
-            // ตรวจสอบว่าขณะนี้เป็นช่วงเวลาของกิจกรรมหรือไม่
-            if (ActivityHandler.isEventRunning) // กิจกรรมหอนกยูง
+            if (ActivityHandler.isEventRunning)
             {
                 ActivityHandler.isRemoveQ = true;
                 announce("กิจกรรมหอนกยูงเริ่มขึ้นแล้ว ขอเชิญเหล่าผู้กล้ามาร่วมกิจกรรมได้ตั้งแต่ 1 12.00 น. ถึง 23.59 น. ของทุก วันพุธ และ อาทิตย์ ขอให้สนุกกับกิจกรรมหอนกยูงนะครับ");
             }
-            else if (ActivityHandler.isEventRunning40) // กิจกรรมประลอง NPC 40 ด่าน
+            else if (ActivityHandler.isEventRunning40)
             {
                 ActivityHandler.isRemoveQ = true;
                 announce("กิจกรรมประลอง NPC 50 ด่านเริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันจันทร์ และ วันพฤหัสบดี");
             }
-            else if (ActivityHandler.isEventRunningPK1) // กิจกรรมประลองเดี่ยว
+            else if (ActivityHandler.isEventRunningPK1)
             {
                 ActivityHandler.isRemoveQ = true;
                 announce("กิจกรรมประลองเดี่ยว เริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันอังคาร");
             }
-            else if (ActivityHandler.isEventRunningPK5) // กิจกรรมประลองชุลมุน แบบกลุ่ม
+            else if (ActivityHandler.isEventRunningPK5)
             {
                 ActivityHandler.isRemoveQ = true;
                 announce("กิจกรรมประลองชุลมุนแบบกลุ่ม เริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันศุกร์");
             }
-            else if (ActivityHandler.isEventRunningPK10) // กิจกรรมประลองเขาวงกรต
+            else if (ActivityHandler.isEventRunningPK10)
             {
                 ActivityHandler.isRemoveQ = true;
                 announce("กิจกรรมประลองเขาวงกรต เริ่มขึ้นแล้วตั้งแต่เวลา 12.00 น. ถึง 23.59 น. ของวันศุกร์");
@@ -1956,31 +1991,30 @@ namespace TS_Server.Client
             {
                 ActivityHandler.isRemoveQ = false;
             }
-            // ตรวจสอบว่าขณะนี้เป็นช่วงเวลาของกิจกรรมหรือไม่
             if (mapID == 10991)
             {
-                if (ActivityHandler.isEventRunning40) // กิจกรรมประลอง NPC 40 ด่าน
+                if (ActivityHandler.isEventRunning40)
                 {
                     client.show_hideNPC(0, 5);
                     ActivityHandler.isRemoveQ = true;
                     announce("กิจกรรมประลอง NPC 50 ด่านเริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันจันทร์ และ วันพฤหัสบดี");
                     return;
                 }
-                else if (ActivityHandler.isEventRunningPK1) // กิจกรรมประลองเดี่ยว
+                else if (ActivityHandler.isEventRunningPK1)
                 {
                     ActivityHandler.isRemoveQ = true;
                     announce("กิจกรรมประลองเดี่ยว เริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันอังคาร");
                     client.show_hideNPC(5, 4);
                     return;
                 }
-                else if (ActivityHandler.isEventRunningPK5) // กิจกรรมประลองชุลมุน แบบกลุ่ม
+                else if (ActivityHandler.isEventRunningPK5)
                 {
                     ActivityHandler.isRemoveQ = true;
                     announce("กิจกรรมประลองชุลมุนแบบกลุ่ม เริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันศุกร์");
                     client.show_hideNPC(5, 3);
                     return;
                 }
-                else if (ActivityHandler.isEventRunningPK10) // กิจกรรมประลองเขาวงกรต
+                else if (ActivityHandler.isEventRunningPK10)
                 {
                     ActivityHandler.isRemoveQ = true;
                     announce("กิจกรรมประลองเขาวงกรต เริ่มขึ้นแล้วตั้งแต่เวลา 12.00 น. ถึง 23.59 น. ของวันศุกร์");
@@ -1993,12 +2027,12 @@ namespace TS_Server.Client
                     return;
                 }
             }
-
-            if (ActivityHandler.isEventRunningTSwar) // กิจกรรมกิลวอ
+            if (ActivityHandler.isEventRunningTSwar)
             {
                 announce("สงครามศึกชิงเมือง เริ่มขึ้นแล้วตั้งแต่เวลา  12.00 น. ถึง 23.59 น. ของวันเสาร์");
             }
         }
+
         public void sendTeam()
         {
             if (client.map != null)
@@ -2006,81 +2040,50 @@ namespace TS_Server.Client
                 foreach (TSClient c in client.map.listPlayers.Values)
                 {
                     var Chr = c.getChar();
-                    //if (c.accID != client.accID)
                     Chr.sendUpdateTeam(true);
-
                 }
             }
         }
-        public void addPet(ushort npcid, int bonus, byte quest) //สัตว์เลี้ยง
+
+        public void addPet(ushort npcid, int bonus, byte quest)
         {
-            //Console.WriteLine(next_pet + " " + npcid);
             for (int i = 0; i < next_pet; i++)
                 if (pet[i].NPCid == npcid) return;
             if (next_pet < 4 && NpcData.npcList.ContainsKey(npcid))
             {
                 pet[next_pet] = new TSPet(this, (byte)(next_pet + 1), quest);
                 pet[next_pet].initPet(NpcData.npcList[npcid]);
-                //Console.WriteLine("Pet id " + npcid + ", sid " + pet[next_pet].pet_sid + " added in slot " + (next_pet + 1) + " Quest " + (pet[next_pet].quest));
                 pet[next_pet].sendNewPet();
-                //Addskill4PetNohaveITEM((byte)(next_pet+1));
                 for (int i = 0; i < bonus; i++)
                     pet[next_pet].getSttPoint();
                 nextPet();
             }
-            //sendTeam();//<<เพิ่มมาใหม่
         }
-        /* public void changePetName(byte slot, byte[] newName) // ของเก่า
-         {
-             if (pet[slot - 1] == null) return;
-             var c = new TSMysqlConnection();
 
-             c.connection.Open();
-             var cmd = new MySqlCommand();
-             cmd.Connection = c.connection;
-             cmd.CommandText = "UPDATE pet SET `name` = @name WHERE pet_sid=" + pet[slot - 1].pet_sid;
-             cmd.Prepare();
-             cmd.Parameters.AddWithValue("@name", pet[slot - 1].name);
-             cmd.ExecuteNonQuery();
-             c.connection.Close();
-
-             pet[slot - 1].name = newName;
-
-             PacketCreator p = new PacketCreator(0xf, 9);
-             p.add32(client.accID);
-             p.add8(slot);
-             p.addBytes(pet[slot - 1].name);
-             reply(p.send());
-         }*/
-        public void changePetName(byte slot, byte[] newName) //<<เพิ่มมาใหม่
+        public void changePetName(byte slot, byte[] newName)
         {
             if (pet[slot - 1] == null) return;
-            string newNameString = Encoding.Default.GetString(newName, 0, newName.Length);
+            string newNameString = Encoding.UTF8.GetString(newName, 0, newName.Length);
             var c = new TSMysqlConnection();
-
             c.connection.Open();
             var cmd = new MySqlCommand();
             cmd.Connection = c.connection;
             cmd.CommandText = "UPDATE " + TSServer.config.tbPet + " SET `name` = @name WHERE pet_sid=" + pet[slot - 1].pet_sid;
             cmd.Prepare();
-            //cmd.Parameters.AddWithValue("@name", name);
             cmd.Parameters.AddWithValue("@name", newNameString);
             cmd.ExecuteNonQuery();
             c.connection.Close();
-
-            //pet[slot - 1].name = newName;
             pet[slot - 1].name = newNameString;
-            pet[slot - 1].nameBytes = PacketReader.string2ByteArray(newNameString);
-
+            pet[slot - 1].nameBytes = Encoding.UTF8.GetBytes(newNameString);
             PacketCreator p = new PacketCreator(0xf, 9);
             p.add32(client.accID);
             p.add8(slot);
             p.addBytes(pet[slot - 1].nameBytes);
             reply(p.send());
         }
+
         public void removePet(byte slot)
         {
-
             int index = Array.FindIndex(pet, item => item?.slot == slot);
             if (index >= 0)
             {
@@ -2088,45 +2091,20 @@ namespace TS_Server.Client
                 {
                     int pet_sidold = pet[index].pet_sid;
                     pet[index] = null;
-
-                    //for (int i = 0; i < 4; i++)
-                    //{
-                    //    for (int j = 0; j < 4; j++)
-                    //    {
-                    //        if (pet[i] == null && pet[i + j] != null)
-                    //        {
-                    //            pet[i + j].slot = (byte)j;
-                    //            pet[i + j].pet_sid = pet_sidold;
-                    //            pet[i] = pet[i+j]; // เอาขุนช่องถัดไปที่ไม่ใช่ null มาแทนที่ขุนตำแหน่ง I
-                    //            pet[i + j] = null; // ทำให้ช่องขุนช่องถัดไปเป็น null
-
-                    //            PacketCreator p1 = new PacketCreator(0x0f, 1);
-                    //            p1.add32(client.accID);
-                    //            p1.addByte(pet[i].slot); p1.add16(pet[i].NPCid); p1.add16(0);
-                    //            p1.addByte(pet[i].quest);
-                    //            //owner.reply(p1.send());
-                    //            replyToMap(p1.send(), true);
-                    //        }
-                    //    }                     
-                    //}
-                    //client.savePettoDB();
                     var c = new TSMysqlConnection();
                     try
                     {
                         c.updateQuery("DELETE FROM pet WHERE pet_sid=" + pet_sidold);
-                        //pet[index] = null;
                         if (pet_battle == index)
                         {
                             pet_battle = -1;
                             c.updateQuery("UPDATE " + TSServer.config.tbChars + " SET `pet_battle` = " + pet_battle + " WHERE id=" + this.charId);
                         }
-
                         nextPet();
                         PacketCreator p = new PacketCreator(0xf, 2);
                         p.add32(client.accID);
                         p.add8(slot);
-                        //reply(p.send());
-                        replyToMap(p.send(), true); //เพิ่มมาใหม่
+                        replyToMap(p.send(), true);
                         sendPetInfo();
                     }
                     catch (Exception e)
@@ -2139,100 +2117,49 @@ namespace TS_Server.Client
                     }
                 }
             }
-
         }
+
         public void ChangSlotPet()
         {
             int count = 0;
-            //int solt = 0;
-            /*foreach (var num in pet)
-            {
-                
-                if (num != null && solt < 4)
-                    count++;
-                solt++;
-            }*/
-
-
             for (int i = 0; i < 4; i++)
             {
-                //if (pet[i] != null)
+                if (pet[i].slot == 4)
                 {
-                    if (pet[i].slot == 4)
-                    {
-                        pet[i].slot = 3;
-                    }
-                    if (pet[i].slot == 3)
-                    {
-                        pet[i].slot = 2;
-                    }
-                    if (pet[i].slot == 2)
-                    {
-                        pet[i].slot = 1;
-                    }
+                    pet[i].slot = 3;
+                }
+                if (pet[i].slot == 3)
+                {
+                    pet[i].slot = 2;
+                }
+                if (pet[i].slot == 2)
+                {
+                    pet[i].slot = 1;
                 }
             }
-
-
-            //var c = new TSMysqlConnection();
             for (int i = 0; i < count; i++)
             {
                 pet[i].slot = 0;
                 pet[i].slot = (byte)(i + 1);
-
-                //c.updateQuery("UPDATE " + TSServer.config.tbPet + " SET `solt` =" + i )
             }
-            //c.connection.Close();
-            //else break;
         }
+
         public void removePetQ(ushort id)
         {
-            //var c = new TSMysqlConnection();
             try
             {
-                //MySqlDataReader data = c.selectQuery("SELECT * FROM pet WHERE charid = " + charId + " AND npcid=" + id);
-                //if (data.Read())
-                //{
-                //    byte slot = data.GetByte("slot");
-                //    byte q = data.GetByte("quest");
-                //    if (q == 0)
-                //    {
-                //        removePet(slot);
-                //    }
-
-                //}
-
-                //for (int i = 0; i < 4; i++)
-                //{
-                //    if (pet[i].NPCid == id && pet[i].quest == 0)
-                //    {
-                //        removePet(pet[i].slot);
-                //    }
-                //}
-                //var petIn = pet.Any(x=>x.NPCid == id && x.quest == 0);
-                //if (petIn)
-                //{
-                // byte slot = pet.FirstOrDefault(x => x.NPCid == id && x.quest == 0).slot;
                 byte slot = pet.Where(x => x != null)
                .FirstOrDefault(x => x.NPCid == id && x.quest == 0)?.slot ?? 0;
                 removePet(slot);
-                //}
-
-
             }
             catch (Exception e)
             {
                 WriteLog.ErrorDB("removePetQById " + e);
             }
-            //finally
-            //{
-            //    c.connection.Close();
-            //}
-
         }
+
         public void removePetN(ushort id)
         {
-            //var c = new TSMysqlConnection();
             try
             {
                 byte slot = pet.Where(x => x != null)
@@ -2243,8 +2170,8 @@ namespace TS_Server.Client
             {
                 WriteLog.ErrorDB("removePetByID " + e);
             }
-
         }
+
         public void nextPet()
         {
             for (next_pet = 0; next_pet < 4; next_pet++)
@@ -2252,31 +2179,20 @@ namespace TS_Server.Client
                 if (pet[next_pet] == null)
                     break;
             }
-            //Console.WriteLine("next_pet " + next_pet);
-            /*next_pet = 0;
-            while (next_pet < 4)
-                if (pet[next_pet] != null)
-                    next_pet++;
-                else break;*/
         }
+
         public void sendEquipBonus()
         {
             Dictionary<ushort, int> bonus_list = new Dictionary<ushort, int>();
             int _hp = hp;
             int _sp = sp;
-            //Console.WriteLine("before sp " + sp + "/" + sp_max);
-            mag2 = 0; atk2 = 0; def2 = 0; hp2 = 0; sp2 = 0; agi2 = 0; /*hpx2 = 0; spx2 = 0;*/
+            mag2 = 0; atk2 = 0; def2 = 0; hp2 = 0; sp2 = 0; agi2 = 0;
             Dictionary<ushort, int> comboSets = new Dictionary<ushort, int>();
-
-
             foreach (KeyValuePair<ushort, int> cmb in comboSets.ToList())
             {
-                //Logger.Error(cmb.Key + " count = " + cmb.Value);
                 SuitInfo suitInfo = SuitData.suitList[cmb.Key];
                 if (comboSets[cmb.Key] >= suitInfo.count1)
                 {
-                    //Logger.Error(suitInfo.prop1 + " = " + suitInfo.prop1_val);
-                    //setEquipBonus(suitInfo.prop1, suitInfo.prop1_val);
                     if (bonus_list.ContainsKey(suitInfo.prop1))
                         bonus_list[suitInfo.prop1] += suitInfo.prop1_val;
                     else
@@ -2284,8 +2200,6 @@ namespace TS_Server.Client
                 }
                 if (comboSets[cmb.Key] >= suitInfo.count2)
                 {
-                    //Logger.Warning(suitInfo.prop2 + " = " + suitInfo.prop2_val);
-                    //setEquipBonus(suitInfo.prop2, suitInfo.prop2_val);
                     if (bonus_list.ContainsKey(suitInfo.prop2))
                         bonus_list[suitInfo.prop2] += suitInfo.prop2_val;
                     else
@@ -2293,16 +2207,12 @@ namespace TS_Server.Client
                 }
                 if (comboSets[cmb.Key] >= suitInfo.count3)
                 {
-                    //Logger.Info(suitInfo.prop3 + " = " + suitInfo.prop3_val);
-                    //setEquipBonus(suitInfo.prop3, suitInfo.prop3_val);
                     if (bonus_list.ContainsKey(suitInfo.prop3))
                         bonus_list[suitInfo.prop3] += suitInfo.prop3_val;
                     else
                         bonus_list.Add(suitInfo.prop3, suitInfo.prop3_val);
                 }
             }
-
-            //Bonus ใส่ตรงธาตุทั้งตัว
             bool all_equip_same_elm = equipment.Where(eq => eq != null && (
                 eq.elem_type == this.element
                 || eq.other_type == this.element
@@ -2317,29 +2227,18 @@ namespace TS_Server.Client
                     {
                         if (bonus_list.ContainsKey(equipment[i].Itemid))
                         {
-                            //setEquipBonus(itemInfo.prop1, 3);
-                            //if (bonus_list.ContainsKey(itemInfo.prop1))
-                            //    bonus_list[itemInfo.prop1] += 3;
-                            //else
-                            //    bonus_list.Add(itemInfo.prop1, 3);
-
-                            //if (bonus_list.ContainsKey(itemInfo.prop2))
-                            //    bonus_list[itemInfo.prop2] += 3;
-                            //else
-                            //    bonus_list.Add(itemInfo.prop2, 3);
                         }
                     }
                 }
             }
         }
-        public void addEquipSoul(ushort prop, int soullv, int odl_soullv, int type) //type 0 : equip on, type 1 : unequip
+
+        public void addEquipSoul(ushort prop, int soullv, int odl_soullv, int type)
         {
             if (prop == 214)
             {
                 soullv = 0;
-
             }
-
             int val = type == 0 ? soullv : -soullv;
             int val2 = odl_soullv <= 0 ? 0 : odl_soullv;
             switch (prop)
@@ -2366,7 +2265,8 @@ namespace TS_Server.Client
                     break;
             }
         }
-        public void addEquipBonus(ushort prop, int prop_val, int type) //type 0 : equip on, type 1 : unequip
+
+        public void addEquipBonus(ushort prop, int prop_val, int type)
         {
             int val = type == 0 ? prop_val : -prop_val;
             switch (prop)
@@ -2393,6 +2293,7 @@ namespace TS_Server.Client
                     break;
             }
         }
+
         public void sendLook(bool forReborn)
         {
             var p = new PacketCreator(3);
@@ -2411,16 +2312,15 @@ namespace TS_Server.Client
             p.addByte(nb_equips);
             for (int i = 0; i < 6; i++)
                 if (equipment[i] != null) p.add16(equipment[i].Itemid);
-            p.add32((uint)guild_id); // guild id
+            p.add32((uint)guild_id);
             p.addByte(5);
             p.addByte(rb);
             p.addByte(job);
-            //if (!forReborn)
-            //    p.addBytes(name);
             if (!forReborn)
-                p.addBytes(PacketReader.string2ByteArray(name));
+                p.addBytes(Encoding.UTF8.GetBytes(name));
             reply(p.send());
         }
+
         public byte[] sendLookForOther()
         {
             var p = new PacketCreator(0x03);
@@ -2441,20 +2341,16 @@ namespace TS_Server.Client
             p.addByte(nb_equips);
             for (int i = 0; i < 6; i++)
                 if (equipment[i] != null) p.add16(equipment[i].Itemid);
-
-            p.add32((uint)guild_id); // guild id
+            p.add32((uint)guild_id);
             p.add16(0);
             p.addByte(rb);
             p.addByte(job);
-            p.addBytes(PacketReader.string2ByteArray(name));
-
-            // Look(0x03) → Link(27/09) — 0x08 ส่งแยกที่ caller
+            p.addBytes(Encoding.UTF8.GetBytes(name));
             byte[] basePacket = p.send();
             if (guild_id > 0)
             {
                 var pLink = GuildData.BuildGuildLinkPacket(this);
                 byte[] linkBytes = pLink != null ? pLink.send() : new byte[0];
-
                 byte[] combined = new byte[basePacket.Length + linkBytes.Length];
                 Buffer.BlockCopy(basePacket, 0, combined, 0, basePacket.Length);
                 Buffer.BlockCopy(linkBytes, 0, combined, basePacket.Length, linkBytes.Length);
@@ -2462,6 +2358,7 @@ namespace TS_Server.Client
             }
             return basePacket;
         }
+
         public byte[] sendLookForOther2()
         {
             var p = new PacketCreator(0x03);
@@ -2482,20 +2379,16 @@ namespace TS_Server.Client
             p.addByte(nb_equips);
             for (int i = 0; i < 6; i++)
                 if (equipment[i] != null) p.add16(equipment[i].Itemid);
-
-            p.add32((uint)guild_id); // guild id
+            p.add32((uint)guild_id);
             p.add16(0);
             p.addByte(rb);
             p.addByte(job);
-            p.addBytes(PacketReader.string2ByteArray(name));
-
-            // Look(0x03) → Link(27/09) — 0x08 ส่งแยกที่ caller
+            p.addBytes(Encoding.UTF8.GetBytes(name));
             byte[] basePacket2 = p.send();
             if (guild_id > 0)
             {
                 var pLink2 = GuildData.BuildGuildLinkPacket(this);
                 byte[] linkB = pLink2 != null ? pLink2.send() : new byte[0];
-
                 byte[] combined2 = new byte[basePacket2.Length + linkB.Length];
                 Buffer.BlockCopy(basePacket2, 0, combined2, 0, basePacket2.Length);
                 Buffer.BlockCopy(linkB, 0, combined2, basePacket2.Length, linkB.Length);
@@ -2503,15 +2396,16 @@ namespace TS_Server.Client
             }
             return basePacket2;
         }
+
         public byte[] setExpress(byte expressType, byte expressCode)
         {
             var p = new PacketCreator(0x20);
             p.add8(expressType);
             p.add32(client.accID);
             p.add8(expressCode);
-
             return p.send();
         }
+
         public void sendInfo()
         {
             var p = new PacketCreator(5, 3);
@@ -2537,32 +2431,24 @@ namespace TS_Server.Client
             p.add32((UInt32)agi2);
             p.add32((UInt32)hp2);
             p.add32((UInt32)sp2);
-            //ค่ายทหาร
-            //p.add16(armypoint[TSConstants.ARMY_POINT_WEI_KONG]);
-            //p.add16(armypoint[TSConstants.ARMY_POINT_SHU_KONG]);
-            //p.add16(armypoint[TSConstants.ARMY_POINT_WU_KONG]);
-            //p.add16(armypoint[TSConstants.ARMY_POINT_YELLOW_CLOTH]);
-            //p.add16(armypoint[TSConstants.ARMY_POINT_GREAT_FIGHTER]);
             p.add16(500);
             p.add16(500);
             p.add16(500);
             p.add16(500);
             p.add16(500);
-            //ปฏิบัติ ฯลฯ หักบัญชี
             p.addZero(0x2B);
             foreach (ushort s in skill.Keys)
             {
                 p.add16(s);
                 p.addByte(skill[s]);
             }
-
             reply(p.send());
             refresh(FullHpMax, TSConstants._FULLHPMAX);
             refresh(FullSpMax, TSConstants._FULLSPMAX);
-            //บอลจุติ info
             if (rb == 2)
                 sendBallList();
         }
+
         public void sendBallList()
         {
             PacketCreator p = new PacketCreator(0x17, 0x4d);
@@ -2571,7 +2457,6 @@ namespace TS_Server.Client
                 if (ballList[i])
                     p.add8((byte)(i + 1));
             reply(p.send());
-
             PacketCreator p1 = new PacketCreator(0x17, 0x4e);
             for (int i = 0; i < 8; i++)
                 if (skill_rb2[i] != 0)
@@ -2579,10 +2464,10 @@ namespace TS_Server.Client
                     p1.add8((byte)(i + 1));
                     p1.add16(skill_rb2[i]);
                 }
-
             reply(p1.send());
         }
-        public void sendUpdateTeam(bool self) //<<เพิ่มมาใหม่
+
+        public void sendUpdateTeam(bool self)
         {
             try
             {
@@ -2594,32 +2479,19 @@ namespace TS_Server.Client
                     p.add8((byte)(party.member.Count - 1));
                     foreach (TSCharacter c in party.member)
                     {
-                        //refreshTeam();
                         if (c.client.accID != party.leader_id)
                             p.add32((uint)c.client.accID);
                         c.refreshTeam();
                     }
                     replyToMap(p.send(), self);
-                    //replyToAll(p.send(), true);
                     refreshTeam();
                 }
-                //แก้ตรงนี้
-                //if (isTeamMember())
-                //{
-                //    var p = new PacketCreator(0x0D);
-                //    p.add8(0x05);
-                //    p.add32(party.leader_id);
-                //    p.add32(party.member_id);
-                //    replyToMap(p.send(), self);
-                //}
-
                 try
                 {
                     if (pet != null)
                     {
                         for (int i = 0; i < pet.Length; i++)
                         {
-                            //&& pet[i].NPCid != horseID
                             if (pet[i] != null)
                             {
                                 var p1 = new PacketCreator(0x0f);
@@ -2635,13 +2507,11 @@ namespace TS_Server.Client
                             }
                         }
                     }
-
                 }
                 catch (Exception se)
                 {
                     Console.WriteLine(se);
                 }
-                // Update horse ride (อัพเวลาขี่ม้า)
                 if (horseID > 0)
                     rideHorse(true, self, horseID);
                 else
@@ -2652,18 +2522,18 @@ namespace TS_Server.Client
                 Console.WriteLine(se);
             }
         }
+
         public ushort findpetid(ushort pet_id)
         {
             if (pet_id == 0)
                 return 0;
             byte? ii = pet?.FirstOrDefault(x => x?.NPCid == pet_id)?.slot;
             TSEquipment pet_eq = pet?[(byte)(ii - 1)].equipment?[5];
-            //if (pet_eq != null)
             ushort itemid = pet_eq == null ? (ushort)0 : pet_eq.Itemid;
-
             return itemid;
         }
-        public void addSaddleEquipBonus(ushort unk3, int unk5, int unk9) //type 0 : equip on, type 1 : unequip //อานม้า
+
+        public void addSaddleEquipBonus(ushort unk3, int unk5, int unk9)
         {
             horseSadd_Agi2 = (ushort)unk9;
             if (unk5 == 140)
@@ -2682,57 +2552,15 @@ namespace TS_Server.Client
                 agi2 += -horseSadd_Agi2;
             }
         }
-        /*public void sendPetInfo()
+
+        public void sendPetInfo()
         {
             var p1 = new PacketCreator(0x0f, 8);
-            for (int i = 0; i < pet.Length; i++)
+            for (int i = 0; i < 4; i++)
                 if (pet[i] != null)
                     p1.addBytes(pet[i].sendInfo());
             reply(p1.send());
-
-            //สัตว์เลี้ยงในรถ
-            reply(new PacketCreator(new byte[] { 0x0f, 0x14, 1, 0, 0 }).send());
-            reply(new PacketCreator(new byte[] { 0x0f, 0x14, 2, 0, 0 }).send());
-            reply(new PacketCreator(new byte[] { 0x0f, 0x14, 3, 0, 0 }).send());
-            reply(new PacketCreator(new byte[] { 0x0f, 0x14, 4, 0, 0 }).send());
-
-            reply(new PacketCreator(new byte[] { 0x0f, 0x0a }).send());
-
-            //สัตว์เลี้ยงในโรงแรม
-            reply(new PacketCreator(new byte[] { 0x0f, 0x12, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0 }).send());
-
-            reply(new PacketCreator(new byte[] { 0x0f, 0x13, 1, 0 }).send());
-            if (pet_battle != -1)
-            {
-                var p2 = new PacketCreator(0x13);
-                p2.addByte(1);
-                p2.add16(pet[pet_battle].NPCid);
-                p2.add16(0);
-                reply(p2.send());
-            }
-
-            if (pet != null)
-                for (int i = 0; i < pet.Length; i++)
-                    if (pet[i] != null)
-                        pet[i].refreshPet();
-        }*/
-        public void sendPetInfo() //<<เพิ่มมาใหม่
-        {
-            var p1 = new PacketCreator(0x0f, 8);
-            //for (int i = 0; i < pet.Length; i++)
-            for (int i = 0; i < 4; i++) //<< เอาแค่ 4 ตัวไม่งั้นเออเร่อ
-                if (pet[i] != null)
-                    p1.addBytes(pet[i].sendInfo());
-            reply(p1.send());
-
-            //สัตว์เลี้ยงในรถ
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x14, 1, 0, 0 }).send());
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x14, 2, 0, 0 }).send());
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x14, 3, 0, 0 }).send());
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x14, 4, 0, 0 }).send());
-
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x0a }).send());
-            PacketCreator pPetHorse = new PacketCreator(0x0f, 0x0a);//<<--เพิ่มตรงนี้
+            PacketCreator pPetHorse = new PacketCreator(0x0f, 0x0a);
             for (int i = 11; i <= 14; i++)
             {
                 TSPet petInHourse = pet[i - 1];
@@ -2742,12 +2570,7 @@ namespace TS_Server.Client
                 }
             }
             reply(pPetHorse.send());
-
-            //สัตว์เลี้ยงในโรงแรม
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x12, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0 }).send());
-
-            //reply(new PacketCreator(new byte[] { 0x0f, 0x13, 1, 0 }).send());
-            PacketCreator pPetHotel = new PacketCreator(0x1f, 0x06);//<<--เพิ่มตรงนี้
+            PacketCreator pPetHotel = new PacketCreator(0x1f, 0x06);
             for (int i = 5; i <= 10; i++)
             {
                 TSPet petInHotel = pet[i - 1];
@@ -2757,8 +2580,6 @@ namespace TS_Server.Client
                 }
             }
             reply(pPetHotel.send());
-
-
             if (pet_battle != -1)
             {
                 if (pet[pet_battle] != null)
@@ -2774,50 +2595,28 @@ namespace TS_Server.Client
                     pet_battle = -1;
                 }
             }
-
             if (pet != null)
                 for (int i = 0; i < pet.Length; i++)
                     if (pet[i] != null)
                         pet[i].refreshPet();
         }
-        //public void sendEquip()
-        //{
-        //    var p = new PacketCreator(0x17, 0x0b);
 
-        //    for (int i = 0; i < 6; i++)
-        //        if (equipment[i] != null)
-        //        {
-        //            p.add16(equipment[i].Itemid);
-        //            p.addByte(equipment[i].duration);
-        //            p.addZero(7);
-        //        }
-        //    reply(p.send());
-        //}
         public void sendEquip()
         {
-            //PacketCreator p = new PacketCreator(0x17, 8);
-            //p.addByte((byte)slot); //Slot
-            //p.add16(Itemid); //item id
-            //p.addByte(quantity); //quantity
-            //p.addByte(0); //Unknow (Doben)
-            //p.addByte(0); //คุณสมบัติอื่น (ธาตุ ดิน=01, น้ำ=02, ไฟ=03, ลม=04, จิต=05)
-            //p.addByte(100 + 0); //ค่าจากคุณสมบัติอื่น (ต้อง +100 ด้วย)
-            //p.addByte(0); //ต่อต้าน
-            //p.add32(0); //ระดับเติบโตพลังวิญญาณ
-
             var p = new PacketCreator(0x17, 0x0b);
             for (int i = 0; i < 6; i++)
                 if (equipment[i] != null)
                 {
-                    p.add16(equipment[i].Itemid); //item id
-                    p.addByte(equipment[i].quantity); //quantity
-                    p.addByte((byte)(equipment[i]?.other_type ?? 0)); //คุณสมบัติอื่น (ธาตุ ดิน=01, น้ำ=02, ไฟ=03, ลม=04, จิต=05)
-                    p.addByte((byte)(100 + (byte)(equipment[i]?.other_val ?? 0))); //ค่าจากคุณสมบัติอื่น (ต้อง +100 ด้วย)
-                    p.addByte((byte)(equipment[i]?.anti ?? 0)); //ต่อต้าน
-                    p.add32((uint)(equipment[i]?.exp ?? 0)); //ระดับเติบโตพลังวิญญาณ
+                    p.add16(equipment[i].Itemid);
+                    p.addByte(equipment[i].quantity);
+                    p.addByte((byte)(equipment[i]?.other_type ?? 0));
+                    p.addByte((byte)(100 + (byte)(equipment[i]?.other_val ?? 0)));
+                    p.addByte((byte)(equipment[i]?.anti ?? 0));
+                    p.add32((uint)(equipment[i]?.exp ?? 0));
                 }
             reply(p.send());
         }
+
         public void sendGold()
         {
             var p = new PacketCreator(0x1a, 4);
@@ -2826,19 +2625,6 @@ namespace TS_Server.Client
             reply(p.send());
         }
 
-        /* public void sendHotkey() //Old
-         {
-             var p = new PacketCreator(0x28, 1);
-
-             for (byte i = 1; i <= 10; i++)
-                 if (hotkey[i - 1] != 0)
-                 {
-                     p.add8(2);
-                     p.add16(hotkey[i - 1]);
-                     p.add8(i);
-                 }
-             reply(p.send());
-         }*/
         public void sendHotkey()
         {
             var p = new PacketCreator(0x28, 1);
@@ -2846,7 +2632,6 @@ namespace TS_Server.Client
             {
                 if (skill.ContainsKey(skid))
                 {
-                    //Logger.Log("" + skid);
                     for (byte i = 1; i <= 10; i++)
                         if (hotkey[i - 1] != 0)
                         {
@@ -2857,8 +2642,8 @@ namespace TS_Server.Client
                     reply(p.send());
                 }
             }
-
         }
+
         public void sendpoint()
         {
             var p = new PacketCreator(0x23, 4);
@@ -2866,103 +2651,39 @@ namespace TS_Server.Client
             p.addZero(12);
             reply(p.send());
         }
-        //public void sendVoucher()
-        //{
-        //    DateTime t = DateTime.Now;
-        //    //พ้อย 112 15/4/2030 23:59:58
-        //    //0x23, 0x04, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x00, 0x00, 0x37, 0xBA, 0xE7, 0xFF, 0x9F, 0x3C, 0xE7, 0x40
-        //    var p = new PacketCreator(0x23, 4);
-        //    p.add32((UInt32)point);
-        //    p.addZero(4);
 
-
-        //    byte[] hexValues = { 0x37, 0xBA, 0xE7, 0xFF, 0x9F, 0x3C, 0xE7, 0x40 };
-        //    p.addBytes(hexValues);
-        //    reply(p.send());
-
-        //}
-
-        //public void sendVoucher()
-        //{
-        //    var p = new PacketCreator(0x23, 0x04);
-        //    uint val1 = (UInt32)point;
-        //    uint val2 = 0;
-        //    //เวลาแสดงห้นาเกมจะแสดง val1 + val2
-        //    p.add32(val1);
-        //    p.add32(val2);
-        //    //double next_month = DateTime.Now.AddMonths(1).ToOADate();
-        //    DateTime airtime_expire = DateTime.Now.AddMonths(1);
-        //    byte[] next_month_bytes = BitConverter.GetBytes(airtime_expire.ToOADate()); //Console.WriteLine(BitConverter.ToString(next_month_bytes));
-        //    p.addBytes(next_month_bytes);
-        //    reply(p.send());
-        //}
         public void sendVoucher()
         {
             var p = new PacketCreator(0x23, 0x04);
             uint val1 = (UInt32)point;
             uint val2 = 0;
-            //เวลาแสดงห้นาเกมจะแสดง val1 + val2
             p.add32(val1);
             p.add32(val2);
-            //double next_month = DateTime.Now.AddMonths(1).ToOADate();
             DateTime airtime_expire = ExpiryDate;
-            byte[] next_month_bytes = BitConverter.GetBytes(airtime_expire.ToOADate()); //Console.WriteLine(BitConverter.ToString(next_month_bytes));
+            byte[] next_month_bytes = BitConverter.GetBytes(airtime_expire.ToOADate());
             p.addBytes(next_month_bytes);
             reply(p.send());
         }
-        //public int processPacket(byte[] data) // เช็คหมดเวลาแอร์ไทม์
-        //{
-        //    byte cmd = data[0];
-        //    //Logger.Error(cmd.ToString());
-        //    //Console.WriteLine(BitConverter.ToString(data));
-        //    if (cmd > 1)
-        //    {
-        //        byte[] alway_allow = new byte[] {
-        //            0x09, //CreateChar
-        //            0x23, //AccountHandler for request item code
-        //            0x25, //LoginCompleteHandler
-        //        };
-        //        if (!alway_allow.Contains(cmd))
-        //        {
-        //            if (client == null || client.getChar() == null) return 1; //fail when state online
 
-        //            if (TSServer.config.airtime && DateTime.Now > client.account.airtime_expire)
-        //            {
-        //                //Console.WriteLine($"หมดเวลาแล้วววววว {client.account.airtime_expire}");
-        //                return 1; //airtime expire
-        //            }
-        //        }
-        //    }
-        //}
         public void sendVoucher3()
         {
             refresh(1000, TSConstants._HP_MAX);
         }
+
         public void FullHpItem(ushort q)
         {
             FullHpMax += (ushort)(q * 50);
-            hp_max = getHpMax(); //Console.WriteLine("hp_max: " + hp_max);
+            hp_max = getHpMax();
             refresh(FullHpMax, TSConstants._FULLHPMAX);
-            //var fhp = new PacketCreator(0x08, 0x01);
-            //fhp.addByte(TSConstants._FULLHPMAX);
-            //fhp.addByte(1);
-            //fhp.add16(IncreaseHpmax);
-            //fhp.addZero(6);
-            //reply(fhp.send());
         }
+
         public void FullSpItem(ushort q)
         {
-
             FullSpMax += (ushort)(q * 10);
-            sp_max = getSpMax(); //Console.WriteLine("hp_max: " + hp_max);
+            sp_max = getSpMax();
             refresh(FullSpMax, TSConstants._FULLSPMAX);
-            //var fhp = new PacketCreator(0x08, 0x01);
-            //fhp.addByte(TSConstants._FULLHPMAX);
-            //fhp.addByte(1);
-            //fhp.add16(IncreaseHpmax);
-            //fhp.addZero(6);
-            //reply(fhp.send());
         }
+
         public void refreshChr()
         {
             refresh(hpx, TSConstants._HPX);
@@ -2973,10 +2694,10 @@ namespace TS_Server.Client
             refresh(agi, TSConstants._AGI);
             refresh(hp, TSConstants._HP);
             refresh(sp, TSConstants._SP);
-
             refreshBonus();
         }
-        public void showOutfit() // แปลงร่าง ตุ๊กตา
+
+        public void showOutfit()
         {
             if (!NpcData.npcList.ContainsKey(outfitId)) return;
             PacketCreator p = new PacketCreator(5, 5);
@@ -2984,6 +2705,7 @@ namespace TS_Server.Client
             p.add16(outfitId);
             replyToMap(p.send(), true);
         }
+
         public void refreshBonus()
         {
             refresh(mag2, TSConstants._MAG2);
@@ -2991,17 +2713,15 @@ namespace TS_Server.Client
             refresh(def2, TSConstants._DEF2);
             refresh(hp2, TSConstants._HP2);
             refresh(sp2, TSConstants._SP2);
-            refresh(agi2, TSConstants._AGI2);
             if (horseID > 0)
                 refresh(agi2 - horseSadd_Agi2, TSConstants._AGI2);
             else
                 refresh(agi2, TSConstants._AGI2);
         }
+
         public void refresh(int prop, byte prop_code, bool team = false)
         {
-
             var p = new PacketCreator(0x08);
-
             if (party != null && team)
             {
                 p.addByte(0x03);
@@ -3009,7 +2729,6 @@ namespace TS_Server.Client
             }
             else
                 p.addByte(0x01);
-
             p.addByte(prop_code);
             if (prop >= 0)
             {
@@ -3022,18 +2741,15 @@ namespace TS_Server.Client
                 p.add32((UInt32)(-prop));
             }
             p.add32(0);
-            //Console.WriteLine("Receive Exp CHAR> " + String.Join(",", p.getData()));
             if (party != null && team)
                 replyToTeam(p.send());
             else
                 reply(p.send());
-
         }
+
         public void refresh2(uint prop, byte prop_code, bool team = false)
         {
-
             var p = new PacketCreator(0x08);
-
             if (party != null && team)
             {
                 p.addByte(0x03);
@@ -3041,7 +2757,6 @@ namespace TS_Server.Client
             }
             else
                 p.addByte(0x01);
-
             p.addByte(prop_code);
             if (prop >= 0)
             {
@@ -3054,17 +2769,15 @@ namespace TS_Server.Client
                 p.add32((UInt32)(-prop));
             }
             p.add32(0);
-            //Console.WriteLine("Receive Exp CHAR> " + String.Join(",", p.getData()));
             if (party != null && team)
                 replyToTeam(p.send());
             else
                 reply(p.send());
-
         }
+
         public void refreshNotme(int prop, byte prop_code, bool team = false)
         {
             var p = new PacketCreator(0x08);
-
             if (party != null && team)
             {
                 p.addByte(0x03);
@@ -3072,7 +2785,6 @@ namespace TS_Server.Client
             }
             else
                 p.addByte(0x01);
-
             p.addByte(prop_code);
             if (prop >= 0)
             {
@@ -3085,13 +2797,12 @@ namespace TS_Server.Client
                 p.add32((UInt32)(-prop));
             }
             p.add32(0);
-
             if (party != null && team)
                 replyToTeamNotme(p.send());
             else
                 reply(p.send());
-
         }
+
         public void refreshTeam()
         {
             refresh(hpx, TSConstants._HPX, true);
@@ -3102,19 +2813,15 @@ namespace TS_Server.Client
             refresh(agi, TSConstants._AGI, true);
             refresh(hp, TSConstants._HP, true);
             refresh(sp, TSConstants._SP, true);
-
-            //refresh(hp_max, TSConstants._FULLHPMAX, true);
-            //refresh(sp_max, TSConstants._FULLSPMAX, true);
-
             refresh(mag2, TSConstants._MAG2, true);
             refresh(atk2, TSConstants._ATK2, true);
             refresh(def2, TSConstants._DEF2, true);
             refresh(hp2, TSConstants._HP2, true);
             refresh(sp2, TSConstants._SP2, true);
-            refresh(agi2, TSConstants._AGI2, true);
             refresh(FullHpMax, TSConstants._FULLHPMAX);
             refresh(FullSpMax, TSConstants._FULLSPMAX);
         }
+
         public void refreshTeamNotme()
         {
             refreshNotme(hpx, TSConstants._HPX, true);
@@ -3125,40 +2832,29 @@ namespace TS_Server.Client
             refreshNotme(agi, TSConstants._AGI, true);
             refreshNotme(hp, TSConstants._HP, true);
             refreshNotme(sp_max, TSConstants._SP, true);
-            //refreshNotme(sp, TSConstants._SP, true);
-
             refreshNotme(mag2, TSConstants._MAG2, true);
             refreshNotme(atk2, TSConstants._ATK2, true);
             refreshNotme(def2, TSConstants._DEF2, true);
             refreshNotme(hp2, TSConstants._HP2, true);
             refreshNotme(sp2, TSConstants._SP2, true);
-
             if (horseID > 0)
                 refreshNotme(agi2 - horseSadd_Agi2, TSConstants._AGI2, true);
             else
                 refreshNotme(agi2, TSConstants._AGI2, true);
-
-            //refreshNotme(agi2, TSConstants._AGI2, true);
             refreshNotme(FullHpMax, TSConstants._FULLHPMAX);
             refreshNotme(FullSpMax, TSConstants._FULLSPMAX);
-
-
         }
+
         public void refreshTeamNotmeBt()
         {
-            //Console.WriteLine("HP " + hp + " MAXHP " + hp_max);
-            //Console.WriteLine("SP " + sp + " MAXSP " + sp_max);
-            //refreshNotme(hp, TSConstants._HP, true);
-            //refreshNotme(sp, TSConstants._SP, true);
             refreshNotme(hp, TSConstants._HP, true);
             refreshNotme(sp, TSConstants._SP, true);
             refreshNotme(hpx, TSConstants._HPX, true);
             refreshNotme(spx, TSConstants._SPX, true);
             refreshNotme(FullHpMax, TSConstants._FULLHPMAX);
             refreshNotme(FullSpMax, TSConstants._FULLSPMAX);
-
         }
-        //รุ่นที่สมบูรณ์มากขึ้นของการตอบสนองต่อการฟื้นฟู
+
         public void refreshFull(byte prop_code, int prop1, int prop2)
         {
             var p = new PacketCreator(8, 1);
@@ -3174,9 +2870,9 @@ namespace TS_Server.Client
                 p.add32((UInt32)(-prop1));
             }
             p.add32((UInt32)prop2);
-
             reply(p.send());
         }
+
         public void announce(string msg)
         {
             var p = new PacketCreator(2, 0x0b);
@@ -3184,6 +2880,7 @@ namespace TS_Server.Client
             p.addString(msg);
             reply(p.send());
         }
+
         public void sendGMMessage(string msg)
         {
             if (this != null)
@@ -3191,20 +2888,13 @@ namespace TS_Server.Client
                 PacketCreator p = new PacketCreator(0x02);
                 p.add8(0x04);
                 p.add32(0);
-                p.addBytes(Encoding.Default.GetBytes(msg));
+                p.addBytes(Encoding.UTF8.GetBytes(msg));
                 reply(p.send());
             }
         }
+
         public void saveCharDB(MySqlConnection conn)
         {
-
-            //        cmd.CommandText =
-            //"UPDATE " + TSServer.config.tbChars + " SET level = @level , exp = @curr_exp, exp_tot = @exp_tot , hp = @hp , fullhpmax = @fullhpmax , sp = @sp , fullspmax = @fullspmax , mag = @mag , atk = @atk," +
-            //"def = @def , hpx = @hpx , spx = @spx , agi = @agi , sk_point = @sk_point , stt_point = @stt_point," +
-            //"ghost = @ghost , god = @god , map_id = @map_id , map_x = @map_x , map_y = @map_y , s_map_id = @s_map_id , s_map_x = @s_map_x , s_map_y = @s_map_y , gold = @gold ,hair = @hair ,color1 = @color1 ,color2 = @color2, " +
-            //"gold_bank = @gold_bank , element = @element , honor = @honor , pet_battle = @pet_battle, equip = @equip, inventory = @inventory, bag = @bag, storage = @storage, " +
-            //"skill = @skill, skill_rb2 = @skill_rb2, ball_point = @ball_point, balllist = @balllist, hotkey = @hotkey, armypoint = @armypoint, uesitemcout = @uesitemcout, reborn = @rb, job = @job, ai = @ai, onoffbt = @onoffbt, allball = @allball WHERE accountid = @id";
-
             var cmd = new MySqlCommand();
             cmd.Connection = conn;
             cmd.CommandText =
@@ -3254,7 +2944,6 @@ namespace TS_Server.Client
             cmd.Parameters.AddWithValue("@ball_point", JsonConvert.SerializeObject(ball_point, Formatting.None));
             cmd.Parameters.AddWithValue("@balllist", JsonConvert.SerializeObject(ballList, Formatting.None));
             cmd.Parameters.AddWithValue("@hotkey", JsonConvert.SerializeObject(hotkey, Formatting.None));
-            //cmd.Parameters.AddWithValue("@armypoint", JsonConvert.SerializeObject(armypoint, Formatting.None));
             cmd.Parameters.AddWithValue("@uesitemcout", JsonConvert.SerializeObject(uesitemcout, Formatting.None));
             cmd.Parameters.AddWithValue("@rb", rb);
             cmd.Parameters.AddWithValue("@job", job);
@@ -3265,18 +2954,17 @@ namespace TS_Server.Client
             cmd.Parameters.AddWithValue("@center", JsonConvert.SerializeObject(center, Formatting.None));
             cmd.ExecuteNonQuery();
             SavePoint();
-            if (!client.removeChr) // ดักเวลาลบตัวละคร ถ้ามีการลบจะไม่มีการ save Quest
+            if (!client.removeChr)
                 client.saveQuest();
-
-            //cmd.Connection.Close();
-            //conn.Close();
         }
+
         public void SavePoint()
         {
             var c = new TSMysqlConnection();
             c.updateQuery("UPDATE " + TSServer.config.tbAccount + " SET point =" + point + " WHERE Id = " + client.accID);
             c.connection.Close();
         }
+
         public byte[] saveEquipment()
         {
             var data = new byte[100];
@@ -3286,6 +2974,7 @@ namespace TS_Server.Client
                     equipment[i].generateEquipBinary(ref data, ref pos);
             return data;
         }
+
         public int[,] saveEquipmentJson()
         {
             int[,] equips = new int[6, 10];
@@ -3307,6 +2996,7 @@ namespace TS_Server.Client
             }
             return equips;
         }
+
         public void loadEquipment(byte[] data)
         {
             int pos = 0;
@@ -3330,6 +3020,7 @@ namespace TS_Server.Client
                     break;
             }
         }
+
         public void loadEquipmentJson(JArray jArray)
         {
             for (int i = 0; i < jArray.Count; i++)
@@ -3359,8 +3050,6 @@ namespace TS_Server.Client
                 equipment[slot - 1].equip.exp = (uint)exp;
                 equipment[slot - 1].equip.uescout = uescout;
                 equipment[slot - 1].char_owner = this;
-                //equipment[slot - 1].container = new TSItemContainer(this, 6);
-
                 nb_equips++;
                 addEquipBonus(ItemData.itemList[itemid].prop1, ItemData.itemList[itemid].prop1_val, 0);
                 addEquipBonus(ItemData.itemList[itemid].prop2, ItemData.itemList[itemid].prop2_val, 0);
@@ -3382,6 +3071,7 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public byte[] saveSkill()
         {
             var data = new byte[600];
@@ -3416,16 +3106,14 @@ namespace TS_Server.Client
                         pos += 3;
                     }
             }
-
             return data;
         }
+
         public void loadSkill(byte[] data)
         {
             int pos = 0;
             ushort sk_id;
-
             if (data.Length < 3) return;
-
             while (pos < data.Length)
             {
                 sk_id = (ushort)(data[pos] + (data[pos + 1] << 8));
@@ -3455,6 +3143,7 @@ namespace TS_Server.Client
                     break;
             }
         }
+
         public byte[] saveHotkey()
         {
             var data = new byte[30];
@@ -3469,6 +3158,7 @@ namespace TS_Server.Client
                 }
             return data;
         }
+
         public void loadHotkey(byte[] data)
         {
             int pos = 0;
@@ -3483,21 +3173,20 @@ namespace TS_Server.Client
             }
         }
 
-
         public void reply(byte[] data)
         {
             if (client.online)
                 client.reply(data);
         }
+
         public void replyToMap(byte[] data, bool self)
         {
             if (client.map != null && client != null)
                 client.map.BroadCast(client, data, self);
         }
+
         public void replyToAll(byte[] data, bool self)
         {
-            //if (client.online == true)
-            //Thread.Sleep(50);
             if (client.map != null)
             {
                 if (TSWorld.getInstance().listMap.ContainsKey(client.map.mapid))
@@ -3510,23 +3199,7 @@ namespace TS_Server.Client
                 }
             }
         }
-        //public void replyToTeam(byte[] data)
-        //{
-        //        foreach (TSCharacter c in party.member)
-        //        {
-        //            c.reply(data);
-        //        }
-        //}
-        //public void replyToTeam(byte[] data)
-        //{
-        //    if (party != null && party.member != null)
-        //    {
-        //        foreach (TSCharacter c in party.member)
-        //        {
-        //            c.reply(data);
-        //        }
-        //    }
-        //}
+
         public void replyToTeam(byte[] data)
         {
             if (party != null && party.member != null)
@@ -3538,17 +3211,7 @@ namespace TS_Server.Client
                 }
             }
         }
-        //public void replyToTeamNotme(byte[] data)
-        //{
-        //    if (party != null && party.member != null)
-        //    {
-        //        foreach (TSCharacter c in party.member)
-        //        {
-        //            if (c.client.accID != this.accid)
-        //                c.reply(data);
-        //        }
-        //    }
-        //}
+
         public void replyToTeamNotme(byte[] data)
         {
             if (party != null && party.member != null)
@@ -3563,13 +3226,11 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public void replyToArmy(byte[] data, bool self)
         {
-            /* foreach (TSCharacter c in listArmy.Values)
-             {
-                 c.BroadCast(client, data, self = false);
-             }*/
         }
+
         public bool isTeamLeader()
         {
             if (party == null)
@@ -3582,6 +3243,7 @@ namespace TS_Server.Client
                     return false;
             }
         }
+
         public bool isTeamMember()
         {
             if (party == null)
@@ -3594,13 +3256,14 @@ namespace TS_Server.Client
                     return false;
             }
         }
+
         public bool isJoinedTeam()
         {
             return party != null;
         }
+
         public void setHp(int amount)
         {
-            // Console.WriteLine("amount " + amount);
             hp += amount;
             if (hp > hp_max)
                 hp = hp_max;
@@ -3609,9 +3272,9 @@ namespace TS_Server.Client
                     hp = 0;
                 else hp = 1;
         }
+
         public void setCHp(int amount)
         {
-            // Console.WriteLine("amount " + amount);
             clone_hp += amount;
             if (clone_hp > hp_max)
                 clone_hp = hp_max;
@@ -3620,6 +3283,7 @@ namespace TS_Server.Client
                     clone_hp = 0;
                 else clone_hp = 1;
         }
+
         public void setCSp(int amount)
         {
             clone_sp += amount;
@@ -3627,6 +3291,7 @@ namespace TS_Server.Client
                 clone_sp = sp_max;
             if (clone_sp < 0) clone_sp = 0;
         }
+
         public void setSp(int amount)
         {
             sp += amount;
@@ -3634,6 +3299,7 @@ namespace TS_Server.Client
                 sp = sp_max;
             if (sp < 0) sp = 0;
         }
+
         public int getHpMax()
         {
             if (rb == 0)
@@ -3652,6 +3318,7 @@ namespace TS_Server.Client
                     return (int)Math.Round((Math.Pow(level, 0.35) + 10.5) * hpx * 2 + 180 + hp2 + FullHpMax + level);
             }
         }
+
         public int getSpMax()
         {
             if (rb == 0)
@@ -3670,6 +3337,7 @@ namespace TS_Server.Client
                     return (int)Math.Round(Math.Pow(level, 0.25) * spx * 3.5 + 410 + sp2 + FullSpMax + level);
             }
         }
+
         public void setExp(double amountD)
         {
             int amount = 0;
@@ -3684,13 +3352,9 @@ namespace TS_Server.Client
             }
             else
                 amount = (int)amountD;
-            //Console.WriteLine(amount);
-
             if (level >= 200) return;
-
             totalxp = (uint)(totalxp + amount);
             currentxp += amount;
-
             if (amount > 0)
             {
                 int next_level_xp = (int)(Math.Pow(level + 1, xp_pow) + 5);
@@ -3704,8 +3368,8 @@ namespace TS_Server.Client
             }
             else if (currentxp < 0) currentxp = 0;
             refresh((int)totalxp, TSConstants._TOTALEXP);
-
         }
+
         public void setlostExp(double amountD)
         {
             int amount = (int)amountD;
@@ -3713,14 +3377,14 @@ namespace TS_Server.Client
             if (currentxp <= 0) return;
             if (currentxp > amount)
             {
-                //totalxp = (uint)(totalxp - amount);
                 currentxp -= amount;
             }
             else
                 currentxp = 0;
             refresh((int)totalxp, TSConstants._TOTALEXP);
         }
-        public void levelUp() //0x24 = totxp, 0x23  =lvl, 0x25 = sk_point 0x26 = stt_point
+
+        public void levelUp()
         {
             if (level >= 200) return;
             level++;
@@ -3734,17 +3398,11 @@ namespace TS_Server.Client
             refresh(skill_point, 0x25);
             refresh(stt_point, 0x26);
             refreshTeam();
-            //refresh(hp, TSConstants._HP);
-            //refresh(sp, TSConstants._SP);
-            //refresh(hp_max, TSConstants._HP_MAX);
-            //refresh(sp_max, TSConstants._SP_MAX);
         }
+
         public void levelUpcomman(byte index)
         {
-            //if (level >= 200) return;
             level = index;
-            //totalxp = 0;
-            //currentxp = 0;
             int sttpointForLv = index * 2;
             stt_point += sttpointForLv;
             skill_point += index;
@@ -3756,11 +3414,8 @@ namespace TS_Server.Client
             refresh(skill_point, TSConstants._SKILL_POINT);
             refresh(stt_point, TSConstants._STATS_POINT);
             refreshTeam();
-            //refresh(hp, TSConstants._HP);
-            //refresh(sp, TSConstants._SP);
-            //refresh((int)totalxp, 0x24);
-            //client.savetoDB();
         }
+
         public void addGold(uint amont)
         {
             PacketCreator p = new PacketCreator(0x1A, 01);
@@ -3770,6 +3425,7 @@ namespace TS_Server.Client
             client.reply(p.send());
             client.saveChrtoDB();
         }
+
         public void removeGold(uint amont)
         {
             PacketCreator p = new PacketCreator(0x1A, 01);
@@ -3779,6 +3435,7 @@ namespace TS_Server.Client
             client.reply(p.send());
             client.saveChrtoDB();
         }
+
         public void setStat(byte prop_code, int val)
         {
             switch (prop_code)
@@ -3805,7 +3462,8 @@ namespace TS_Server.Client
                     break;
             }
         }
-        public void checkSetStat(ref int prop, byte prop_code, int val) //รหัสสถิติการตั้งค่าในภายหลัง
+
+        public void checkSetStat(ref int prop, byte prop_code, int val)
         {
             if (val > prop + 1 || stt_point == 0)
                 return;
@@ -3814,16 +3472,14 @@ namespace TS_Server.Client
             refresh(stt_point, TSConstants._STATS_POINT);
             refresh(prop, prop_code);
         }
+
         public void setSkill(ushort skillid, byte sk_lvl)
         {
-
-            if (SkillData.skillList.ContainsKey(skillid) && skill_point > 0) //รีเซ็ตรหัสทักษะในภายหลัง
+            if (SkillData.skillList.ContainsKey(skillid) && skill_point > 0)
             {
                 SkillInfo s = SkillData.skillList[skillid];
-
                 int skillpt_needed;
                 bool newskill;
-
                 if (skill.ContainsKey(skillid))
                 {
                     skillpt_needed = sk_lvl - skill[skillid];
@@ -3845,7 +3501,6 @@ namespace TS_Server.Client
                     newskill = true;
                 }
                 else return;
-
                 if (skillpt_needed > 0 && skill_point >= skillpt_needed)
                 {
                     if (newskill)
@@ -3858,6 +3513,7 @@ namespace TS_Server.Client
             }
             sendHotkey();
         }
+
         public void setSkillRb2(byte[] data)
         {
             int pos = 2;
@@ -3867,7 +3523,6 @@ namespace TS_Server.Client
             pos += 4;
             for (int i = 0; i < ball_use; i++)
                 ballList[data[pos + i] - 1] = true;
-
             pos += (int)ball_use;
             uint nbskill = PacketReader.read32(data, pos);
             pos += 4;
@@ -3876,7 +3531,6 @@ namespace TS_Server.Client
                 setSkill(PacketReader.read16(data, pos), data[pos + 2]);
                 pos += 3;
             }
-
             uint skill_place = PacketReader.read32(data, pos) / 3;
             pos += 4;
             for (int i = 0; i < skill_place; i++)
@@ -3884,9 +3538,9 @@ namespace TS_Server.Client
                 skill_rb2[data[pos] - 6] = PacketReader.read16(data, pos + 1);
                 pos += 3;
             }
-
             sendBallList();
         }
+
         public bool setBattlePet(ushort npcid)
         {
             var c = new TSMysqlConnection();
@@ -3900,6 +3554,7 @@ namespace TS_Server.Client
                     }
             return false;
         }
+
         public bool unsetBattlePet()
         {
             var c = new TSMysqlConnection();
@@ -3911,13 +3566,13 @@ namespace TS_Server.Client
             }
             return false;
         }
+
         public void rebornChar(byte nb_reborn, byte j)
         {
             if (level < 120) return;
             if (rb != nb_reborn - 1) return;
             if (rb == 2 && (j < 1 || j > 4)) return;
             if (nb_equips > 0) return;
-
             int sttEx = 0;
             int allskpoint = 0;
             int skEx = 0;
@@ -3989,25 +3644,21 @@ namespace TS_Server.Client
             skill_point = skEx + (int)(level / (4 / nb_reborn));
             atk = 0; mag = 0; def = 0; agi = 0; hpx = 0; spx = 0;
             level = 1;
-
             totalxp = 0;
             currentxp = 0;
             hp_max = getHpMax(); hp = hp_max;
             sp_max = getSpMax(); sp = sp_max;
             honor = 0;
-
             foreach (ushort sk_id in skill.Keys)
             {
                 refreshFull(0x6e, 0, sk_id);
             }
-
             skill.Clear();
             skill.TryAdd(14001, 1);
             skill.TryAdd(14015, 10);
             skill.TryAdd(14021, 5);
             skill.TryAdd(14023, 1);
             skill.TryAdd(14035, 1);
-
             refresh(stt_point, TSConstants._STATS_POINT);
             refresh(skill_point, TSConstants._SKILL_POINT);
             refresh((int)totalxp, TSConstants._TOTALEXP);
@@ -4015,11 +3666,9 @@ namespace TS_Server.Client
             refreshChr();
             sendLook(true);
             sendInfo();
-            //client.savetoDB();
             client.saveChrtoDB();
-
-
         }
+
         public void rebornCharQ(byte nb_reborn, byte j, byte hai, uint col1, uint col2)
         {
             if (level < 120) return;
@@ -4087,7 +3736,6 @@ namespace TS_Server.Client
                             else
                                 allskpoint += (entry.Value - 1) + (Sk_uespoint * 2);
                         }
-
                     }
                     skEx = (allskpoint + skill_point) - (level - 1) - (int)(level / (4 / 1));
                 }
@@ -4098,7 +3746,6 @@ namespace TS_Server.Client
             skill_point = skEx + (int)(level / (4 / nb_reborn));
             atk = 0; mag = 0; def = 0; agi = 0; hpx = 0; spx = 0;
             level = 1;
-
             totalxp = 0;
             currentxp = 0;
             hp_max = getHpMax(); hp = hp_max;
@@ -4107,19 +3754,16 @@ namespace TS_Server.Client
             color1 = col1;
             color2 = col2;
             honor = 0;
-
             foreach (ushort sk_id in skill.Keys)
             {
                 refreshFull(0x6e, 0, sk_id);
             }
-
             skill.Clear();
             skill.TryAdd(14001, 1);
             skill.TryAdd(14015, 10);
             skill.TryAdd(14021, 5);
             skill.TryAdd(14023, 1);
             skill.TryAdd(14035, 1);
-
             refresh(stt_point, TSConstants._STATS_POINT);
             refresh(skill_point, TSConstants._SKILL_POINT);
             refresh((int)totalxp, TSConstants._TOTALEXP);
@@ -4127,19 +3771,16 @@ namespace TS_Server.Client
             refreshChr();
             sendLook(true);
             sendInfo();
-
             foreach (TSClient c in client.map.listPlayers.Values.ToArray())
             {
                 if (c != null && c.accID != client.accID)
                 {
-                    c.reply(sendLookForOther()); // 0x03 + 27/09
-                    // ส่ง 27/08 icon cache แยก (ให้คนอื่นเห็นธง)
+                    c.reply(sendLookForOther());
                     if (guild_id > 0)
                     {
                         var pIcon = GuildData.BuildGuildIconPacket(guild_id);
                         if (pIcon != null) c.reply(pIcon.send());
                     }
-                    // ส่ง 0x1E เฉพาะกิลเดียวกัน (ธงติดหัวตัวเอง)
                     if (guild_id > 0 && c.getChar() != null && c.getChar().guild_id == guild_id)
                     {
                         var pFlag = GuildData.BuildGuildFlagPacket(guild_id, client.accID);
@@ -4147,19 +3788,17 @@ namespace TS_Server.Client
                     }
                 }
             }
-            //client.savetoDB();
             client.saveChrtoDB();
-
-
         }
-        public bool checkPetReborn(byte nb_reborn) //ตรวจสอบว่ามีสัตว์เลี้ยงที่มีสิทธิ์ในการเกิดใหม่
+
+        public bool checkPetReborn(byte nb_reborn)
         {
             int rb_prop = nb_reborn == 1 ? 65 : 67;
             for (int i = 0; i < 4; i++)
                 if (pet[i] != null)
                     if (pet[i].reborn == nb_reborn - 1 && pet[i].level >= nb_reborn * 30 && pet[i].fai >= nb_reborn * 40 + 20)
                     {
-                        ushort rb_item = 0;  //locket or star
+                        ushort rb_item = 0;
                         foreach (ItemInfo it in ItemData.itemList.Values)
                             if (it.prop1 == rb_prop && it.prop1_val == pet[i].NPCid)
                             {
@@ -4172,22 +3811,20 @@ namespace TS_Server.Client
                     }
             return false;
         }
-        public void checkPetAddSkill4() //ตรวจสอบเงือนไขเปิดสกิล 4 ขุนพล
+
+        public void checkPetAddSkill4()
         {
             byte[] listSolt = new byte[] { };
             int item_prop1 = 66;
             List<byte> listpet = new List<byte>();
-            //bool haveitem = false;
             for (int i = 0; i < 4; i++)
                 if (pet[i] != null)
                     if (pet[i].reborn >= 0 && pet[i].level >= 60 && pet[i].fai >= 60 && NpcData.npcList[pet[i].NPCid].skill4 >= 10000 && NpcData.npcList[pet[i].NPCid].reborn > 0 && pet[i].skill4_lvl == 0)
                     {
-
                         int elementPet = NpcData.npcList[pet[i].NPCid].element;
                         ushort idpet = pet[i].NPCid;
-                        ushort item_skill4 = 0;  //locket or star
+                        ushort item_skill4 = 0;
                         int item_pet_element = elementPet == 1 ? 30064 : elementPet == 2 ? 30065 : elementPet == 3 ? 30066 : elementPet == 4 ? 30067 : 0;
-
                         foreach (ItemInfo it in ItemData.itemList.Values)
                             if (it.prop1 == item_prop1 && (it.prop1_val == idpet || it.prop2_val == idpet))
                             {
@@ -4200,9 +3837,7 @@ namespace TS_Server.Client
                                 {
                                     listpet.Add(pet[i].slot);
                                 }
-
                     }
-
             listSolt = listpet.ToArray();
             if (listSolt.Length > 0)
             {
@@ -4212,10 +3847,11 @@ namespace TS_Server.Client
                 reply(p.send());
             }
         }
+
         public void rebornPet(byte nb_reborn, byte slot)
         {
             int rb_prop = nb_reborn == 1 ? 65 : 67;
-            ushort rb_item = 0; //locket or star
+            ushort rb_item = 0;
             ushort pet_rb = 0;
             byte item_slot = 25;
             foreach (ItemInfo i in ItemData.itemList.Values)
@@ -4226,22 +3862,15 @@ namespace TS_Server.Client
                     break;
                 }
             if (rb_item == 0) return;
-
             item_slot = inventory.getItemById(rb_item);
-
-
             if (item_slot == 25) return;
-
-            //inventory.dropItem((byte)(item_slot + 1), 1);
             inventory.dropItemBySlot((byte)(item_slot + 1), 1);
-            //inventory.removeItem((byte)(item_slot), 1);//เพิ่มมาใหม่
-            //int stt_point_bonus = (int)((pet[pet_battle].level) / (nb_reborn * 2));
             int stt_point_bonus = (int)((pet[slot - 1].level) / (nb_reborn * 2));
             removePet(slot);
-            // Pet not quest
             addPet(pet_rb, stt_point_bonus, 1);
             client.savetoDB();
         }
+
         public void Addskill4Pet(byte slot)
         {
             int item_prop1 = 66;
@@ -4252,29 +3881,25 @@ namespace TS_Server.Client
             ushort idpetSkill4 = NpcData.npcList[idpet].skill4;
             ushort item_skill4 = 0;
             int item_pet_element = elementPet == 1 ? 30064 : elementPet == 2 ? 30065 : elementPet == 3 ? 30066 : elementPet == 4 ? 30067 : 0;
-
             foreach (ItemInfo it in ItemData.itemList.Values)
                 if (it.prop1 == item_prop1 && (it.prop1_val == idpet || it.prop2_val == idpet))
                 {
                     item_skill4 = it.id;
                     break;
                 }
-
             item_slot = inventory.getItemById(item_skill4);
             item_slot2 = inventory.getItemById((ushort)item_pet_element);
-
-
             if (item_slot == 25) return;
             if (item_slot2 == 25) return;
             pet[slot - 1].skill4_lvl = SkillData.skillList[idpetSkill4].max_lvl;
             pet[slot - 1].refreshFull(TSConstants._SKILL_LV, pet[slot - 1].skill4_lvl, idpetSkill4);
-            client.Sendpacket("F44402002C01"); //กำเนิดใหม่สำเร็จ
+            client.Sendpacket("F44402002C01");
             inventory.dropItemBySlot((byte)(item_slot + 1), 1);
             inventory.dropItemBySlot((byte)(item_slot2 + 1), 1);
             client.savetoDB();
-
             this.sendPetInfo();
         }
+
         public void Addskill4PetNohaveITEM(byte slot)
         {
             int item_prop1 = 66;
@@ -4287,18 +3912,15 @@ namespace TS_Server.Client
                     item_skill4 = it.id;
                     break;
                 }
-
             if (item_skill4 == 0 && idpetSkill4 >= 10000)
             {
                 pet[slot - 1].skill4_lvl = SkillData.skillList[idpetSkill4].max_lvl;
                 pet[slot - 1].refreshFull(TSConstants._SKILL_LV, pet[slot - 1].skill4_lvl, idpetSkill4);
-                //client.savePettoDB();
-                //this.sendPetInfo();
-                //Console.WriteLine("ขุนพลมีสกิลจิต " + idpet);
             }
             else
                 return;
         }
+
         public void rideHorse(bool ride, bool self, ushort horseid = 0)
         {
             if (ride)
@@ -4330,7 +3952,8 @@ namespace TS_Server.Client
                 horseID = 0;
             }
         }
-        public void calculateAgiSadd(ushort horseid) // คำนวนอานม้า
+
+        public void calculateAgiSadd(ushort horseid)
         {
             ushort petEqitem = findpetid(horseid);
             if (petEqitem.ToString().Length == 5 && ItemData.itemList.TryGetValue(petEqitem, out var p))
@@ -4339,7 +3962,6 @@ namespace TS_Server.Client
                 {
                     int petAgi = pet.FirstOrDefault(x => x.NPCid == horseid).agi;
                     double divide = petAgi / ((double)100 / p.unk9);
-                    //int digi_divide = (int)Math.Ceiling(divide);
                     double digi_divide = Math.Round(divide, MidpointRounding.AwayFromZero);
                     agi2 += (ushort)digi_divide;
                     horseSadd_Agi2 = (ushort)digi_divide;
@@ -4355,25 +3977,25 @@ namespace TS_Server.Client
                     Console.WriteLine("ride Horse AGI2 > " + agi2);
             }
         }
+
         public void setCharElement(byte elemen)
         {
-            //var c = new TSMysqlConnection();
-            //c.updateQuery("UPDATE " + TSServer.config.tbChars + " SET `element` = " + elemen + " WHERE id=" + charId);
             this.element = elemen;
-            //refreshChr();
-            //sendLook(true);
             sendInfo();
         }
+
         public void addskillpoint(int point)
         {
             this.skill_point += point;
             refresh(skill_point, TSConstants._SKILL_POINT);
         }
+
         public void addsttpoint(int point)
         {
             this.stt_point += point;
             refresh(stt_point, 0x26);
         }
+
         public void setstt(string stname, int stt)
         {
             switch (stname)
@@ -4406,9 +4028,9 @@ namespace TS_Server.Client
                     break;
                 default:
                     break;
-
             }
         }
+
         public void addSkillTestServer()
         {
             addSummonSkill(10);
@@ -4419,14 +4041,12 @@ namespace TS_Server.Client
             skill.TryAdd(14035, 1);
             foreach (KeyValuePair<ushort, byte> entry in skill)
             {
-
                 refreshFull(0x6e, entry.Value, entry.Key);
             }
-
         }
-        public void resetskillPoint()//รีสกิวพร้อย
-        {
 
+        public void resetskillPoint()
+        {
             foreach (KeyValuePair<ushort, byte> entry in skill)
             {
                 byte Sk_uespoint = SkillData.skillList[entry.Key].sk_point;
@@ -4460,22 +4080,21 @@ namespace TS_Server.Client
                         skill_point += (entry.Value - 1) + (Sk_uespoint * 2);
                 }
             }
-            //skill_point -= 28; // อันนี้ลบสกิลที่เพิ่มไปใช้หรับตอนเทสเซิฟ
             refresh(skill_point, TSConstants._SKILL_POINT);
         }
-        public void resetskill() //รีเซ็ตสกิล
-        {
-            resetskillPoint(); //รีสกิวพร้อย
 
+        public void resetskill()
+        {
+            resetskillPoint();
             foreach (ushort sk_id in skill.Keys)
             {
                 refreshFull(0x6e, 0, sk_id);
             }
             skill.Clear();
             addSkillTestServer();
-
             sendBallList();
         }
+
         public void resetstt()
         {
             int repoint = mag + atk + def + hpx + spx + agi;
@@ -4491,8 +4110,8 @@ namespace TS_Server.Client
             this.sp_max = getSpMax();
             refresh(stt_point, TSConstants._STATS_POINT);
             refreshChr();
-            //}
         }
+
         public void allstt(int stt)
         {
             this.mag = stt;
@@ -4505,11 +4124,12 @@ namespace TS_Server.Client
             this.sp_max = getSpMax();
             refreshChr();
         }
+
         public void refreshskill(ushort skillid, byte lv_skill)
         {
-            //skill.TryGetValue(skillid, out var lvsk);
             refreshFull(0x6e, lv_skill, skillid);
         }
+
         public void setallskill()
         {
             skill.Clear();
@@ -4528,8 +4148,8 @@ namespace TS_Server.Client
                 refreshFull(0x6e, lvsk, sk_id);
             }
             sendBallList();
-            //sendInfo();
         }
+
         public void AddSkillrb2()
         {
             switch (element)
@@ -4578,6 +4198,7 @@ namespace TS_Server.Client
                     break;
             }
         }
+
         public void setskillElement5()
         {
             skill.TryAdd(14026, 10);
@@ -4589,33 +4210,32 @@ namespace TS_Server.Client
             skill.TryAdd(14006, 10);
             skill.TryAdd(14007, 1);
             skill.TryAdd(14008, 5);
-            //sendInfo();
         }
+
         public void setallskillForJob()
         {
-            //rb2skill
             skill.TryAdd(14038, 10);
             switch (job)
             {
-                case 1: //จอมยุทธ์
+                case 1:
                     skill.TryAdd(14043, 10);
                     skill.TryAdd(14044, 5);
                     skill.TryAdd(14045, 10);
                     skill.TryAdd(14046, 5);
                     break;
-                case 2: //จอมทัพ
+                case 2:
                     skill.TryAdd(14039, 10);
                     skill.TryAdd(14040, 5);
                     skill.TryAdd(14041, 10);
                     skill.TryAdd(14042, 5);
                     break;
-                case 3: //กุนซือ
+                case 3:
                     skill.TryAdd(14047, 10);
                     skill.TryAdd(14048, 10);
                     skill.TryAdd(14049, 10);
                     skill.TryAdd(14050, 10);
                     break;
-                case 4: //เซียน
+                case 4:
                     skill.TryAdd(14051, 10);
                     skill.TryAdd(14052, 5);
                     skill.TryAdd(14053, 5);
@@ -4625,12 +4245,12 @@ namespace TS_Server.Client
                     break;
             }
         }
+
         public void setallskillForElement()
         {
-            switch (element) //เพิ่มสกิลตามธาตุ
+            switch (element)
             {
                 case 1:
-                    //ดิน
                     skill.TryAdd(10001, 10);
                     skill.TryAdd(10002, 10);
                     skill.TryAdd(10003, 10);
@@ -4646,7 +4266,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10013, 10);
                     skill.TryAdd(10014, 1);
                     skill.TryAdd(10015, 5);
-                    //น้ำ
                     skill.TryAdd(11001, 10);
                     skill.TryAdd(11002, 10);
                     skill.TryAdd(11003, 10);
@@ -4662,7 +4281,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11013, 10);
                     skill.TryAdd(11014, 10);
                     skill.TryAdd(11015, 1);
-                    //ลม
                     skill.TryAdd(13001, 10);
                     skill.TryAdd(13002, 5);
                     skill.TryAdd(13003, 5);
@@ -4677,7 +4295,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13012, 5);
                     skill.TryAdd(13013, 10);
                     skill.TryAdd(13014, 10);
-                    //rb1skill ดิน
                     skill.TryAdd(10020, 10);
                     skill.TryAdd(10021, 10);
                     skill.TryAdd(10022, 10);
@@ -4685,7 +4302,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10024, 10);
                     skill.TryAdd(10025, 5);
                     skill.TryAdd(10026, 5);
-                    //rb1skill น้ำ
                     skill.TryAdd(11020, 10);
                     skill.TryAdd(11021, 10);
                     skill.TryAdd(11022, 10);
@@ -4693,7 +4309,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11024, 5);
                     skill.TryAdd(11025, 1);
                     skill.TryAdd(11026, 10);
-                    //rb1skill ลม
                     skill.TryAdd(13019, 10);
                     skill.TryAdd(13020, 5);
                     skill.TryAdd(13021, 5);
@@ -4701,7 +4316,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13023, 10);
                     skill.TryAdd(13024, 10);
                     skill.TryAdd(13025, 5);
-                    //rb2skill ดิน
                     skill.TryAdd(10027, 10);
                     skill.TryAdd(10028, 10);
                     skill.TryAdd(10029, 10);
@@ -4710,7 +4324,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10032, 10);
                     skill.TryAdd(10033, 5);
                     skill.TryAdd(10034, 10);
-                    //rb2skill น้ำ
                     skill.TryAdd(11027, 5);
                     skill.TryAdd(11028, 5);
                     skill.TryAdd(11029, 10);
@@ -4719,7 +4332,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11032, 5);
                     skill.TryAdd(11033, 10);
                     skill.TryAdd(11034, 10);
-                    //rb2skill ลม
                     skill.TryAdd(13026, 10);
                     skill.TryAdd(13027, 10);
                     skill.TryAdd(13028, 10);
@@ -4730,7 +4342,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13033, 10);
                     break;
                 case 2:
-                    //ดิน
                     skill.TryAdd(10001, 10);
                     skill.TryAdd(10002, 10);
                     skill.TryAdd(10003, 10);
@@ -4746,7 +4357,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10013, 10);
                     skill.TryAdd(10014, 1);
                     skill.TryAdd(10015, 5);
-                    //น้ำ
                     skill.TryAdd(11001, 10);
                     skill.TryAdd(11002, 10);
                     skill.TryAdd(11003, 10);
@@ -4762,7 +4372,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11013, 10);
                     skill.TryAdd(11014, 10);
                     skill.TryAdd(11015, 1);
-                    //ไฟ
                     skill.TryAdd(12001, 10);
                     skill.TryAdd(12002, 10);
                     skill.TryAdd(12003, 10);
@@ -4778,7 +4387,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12013, 10);
                     skill.TryAdd(12014, 10);
                     skill.TryAdd(12015, 10);
-                    //rb1skill ดิน
                     skill.TryAdd(10020, 10);
                     skill.TryAdd(10021, 10);
                     skill.TryAdd(10022, 10);
@@ -4786,7 +4394,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10024, 10);
                     skill.TryAdd(10025, 5);
                     skill.TryAdd(10026, 5);
-                    //rb1skill น้ำ
                     skill.TryAdd(11020, 10);
                     skill.TryAdd(11021, 10);
                     skill.TryAdd(11022, 10);
@@ -4794,7 +4401,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11024, 5);
                     skill.TryAdd(11025, 1);
                     skill.TryAdd(11026, 10);
-                    //rb1skill ไฟ
                     skill.TryAdd(12020, 10);
                     skill.TryAdd(12021, 10);
                     skill.TryAdd(12022, 10);
@@ -4802,7 +4408,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12024, 5);
                     skill.TryAdd(12025, 5);
                     skill.TryAdd(12026, 10);
-                    //rb2skill ดิน
                     skill.TryAdd(10027, 10);
                     skill.TryAdd(10028, 10);
                     skill.TryAdd(10029, 10);
@@ -4811,7 +4416,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10032, 10);
                     skill.TryAdd(10033, 5);
                     skill.TryAdd(10034, 10);
-                    //rb2skill น้ำ
                     skill.TryAdd(11027, 5);
                     skill.TryAdd(11028, 5);
                     skill.TryAdd(11029, 10);
@@ -4820,7 +4424,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11032, 5);
                     skill.TryAdd(11033, 10);
                     skill.TryAdd(11034, 10);
-                    //rb2skill ไฟ
                     skill.TryAdd(12027, 10);
                     skill.TryAdd(12028, 10);
                     skill.TryAdd(12029, 10);
@@ -4831,7 +4434,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12034, 10);
                     break;
                 case 3:
-                    //น้ำ
                     skill.TryAdd(11001, 10);
                     skill.TryAdd(11002, 10);
                     skill.TryAdd(11003, 10);
@@ -4847,7 +4449,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11013, 10);
                     skill.TryAdd(11014, 10);
                     skill.TryAdd(11015, 1);
-                    //ไฟ
                     skill.TryAdd(12001, 10);
                     skill.TryAdd(12002, 10);
                     skill.TryAdd(12003, 10);
@@ -4863,7 +4464,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12013, 10);
                     skill.TryAdd(12014, 10);
                     skill.TryAdd(12015, 10);
-                    //ลม
                     skill.TryAdd(13001, 10);
                     skill.TryAdd(13002, 5);
                     skill.TryAdd(13003, 5);
@@ -4878,7 +4478,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13012, 5);
                     skill.TryAdd(13013, 10);
                     skill.TryAdd(13014, 10);
-                    //rb1skill น้ำ
                     skill.TryAdd(11020, 10);
                     skill.TryAdd(11021, 10);
                     skill.TryAdd(11022, 10);
@@ -4886,7 +4485,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11024, 5);
                     skill.TryAdd(11025, 1);
                     skill.TryAdd(11026, 10);
-                    //rb1skill ไฟ
                     skill.TryAdd(12020, 10);
                     skill.TryAdd(12021, 10);
                     skill.TryAdd(12022, 10);
@@ -4894,7 +4492,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12024, 5);
                     skill.TryAdd(12025, 5);
                     skill.TryAdd(12026, 10);
-                    //rb1skill ลม
                     skill.TryAdd(13019, 10);
                     skill.TryAdd(13020, 5);
                     skill.TryAdd(13021, 5);
@@ -4902,7 +4499,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13023, 10);
                     skill.TryAdd(13024, 10);
                     skill.TryAdd(13025, 5);
-                    //rb2skill น้ำ
                     skill.TryAdd(11027, 5);
                     skill.TryAdd(11028, 5);
                     skill.TryAdd(11029, 10);
@@ -4911,7 +4507,6 @@ namespace TS_Server.Client
                     skill.TryAdd(11032, 5);
                     skill.TryAdd(11033, 10);
                     skill.TryAdd(11034, 10);
-                    //rb2skill ไฟ
                     skill.TryAdd(12027, 10);
                     skill.TryAdd(12028, 10);
                     skill.TryAdd(12029, 10);
@@ -4920,7 +4515,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12032, 10);
                     skill.TryAdd(12033, 10);
                     skill.TryAdd(12034, 10);
-                    //rb2skill ลม
                     skill.TryAdd(13026, 10);
                     skill.TryAdd(13027, 10);
                     skill.TryAdd(13028, 10);
@@ -4929,10 +4523,8 @@ namespace TS_Server.Client
                     skill.TryAdd(13031, 10);
                     skill.TryAdd(13032, 5);
                     skill.TryAdd(13033, 10);
-                    //sendInfo();
                     break;
                 case 4:
-                    //ดิน
                     skill.TryAdd(10001, 10);
                     skill.TryAdd(10002, 10);
                     skill.TryAdd(10003, 10);
@@ -4948,7 +4540,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10013, 10);
                     skill.TryAdd(10014, 1);
                     skill.TryAdd(10015, 5);
-                    //ไฟ
                     skill.TryAdd(12001, 10);
                     skill.TryAdd(12002, 10);
                     skill.TryAdd(12003, 10);
@@ -4964,7 +4555,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12013, 10);
                     skill.TryAdd(12014, 10);
                     skill.TryAdd(12015, 10);
-                    //ลม
                     skill.TryAdd(13001, 10);
                     skill.TryAdd(13002, 5);
                     skill.TryAdd(13003, 5);
@@ -4979,7 +4569,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13012, 5);
                     skill.TryAdd(13013, 10);
                     skill.TryAdd(13014, 10);
-                    //rb1skill ดิน
                     skill.TryAdd(10020, 10);
                     skill.TryAdd(10021, 10);
                     skill.TryAdd(10022, 10);
@@ -4987,7 +4576,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10024, 10);
                     skill.TryAdd(10025, 5);
                     skill.TryAdd(10026, 5);
-                    //rb1skill ไฟ
                     skill.TryAdd(12020, 10);
                     skill.TryAdd(12021, 10);
                     skill.TryAdd(12022, 10);
@@ -4995,7 +4583,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12024, 5);
                     skill.TryAdd(12025, 5);
                     skill.TryAdd(12026, 10);
-                    //rb1skill ลม
                     skill.TryAdd(13019, 10);
                     skill.TryAdd(13020, 5);
                     skill.TryAdd(13021, 5);
@@ -5003,7 +4590,6 @@ namespace TS_Server.Client
                     skill.TryAdd(13023, 10);
                     skill.TryAdd(13024, 10);
                     skill.TryAdd(13025, 5);
-                    //rb2skill ดิน
                     skill.TryAdd(10027, 10);
                     skill.TryAdd(10028, 10);
                     skill.TryAdd(10029, 10);
@@ -5012,7 +4598,6 @@ namespace TS_Server.Client
                     skill.TryAdd(10032, 10);
                     skill.TryAdd(10033, 5);
                     skill.TryAdd(10034, 10);
-                    //rb2skill ไฟ
                     skill.TryAdd(12027, 10);
                     skill.TryAdd(12028, 10);
                     skill.TryAdd(12029, 10);
@@ -5021,7 +4606,6 @@ namespace TS_Server.Client
                     skill.TryAdd(12032, 10);
                     skill.TryAdd(12033, 10);
                     skill.TryAdd(12034, 10);
-                    //rb2skill ลม
                     skill.TryAdd(13026, 10);
                     skill.TryAdd(13027, 10);
                     skill.TryAdd(13028, 10);
@@ -5030,27 +4614,19 @@ namespace TS_Server.Client
                     skill.TryAdd(13031, 10);
                     skill.TryAdd(13032, 5);
                     skill.TryAdd(13033, 10);
-                    //sendInfo();
                     break;
                 default:
                     break;
             }
         }
+
         public void setBalllisRb2()
         {
             for (int i = 0; i < 12; i++)
                 if (ballList[i] != true)
                     ballList[i] = true;
-            //sendBallList();
         }
 
-        /* public void setCharElement(byte element)
-         {
-             var c = new TSMysqlConnection();
-
-             c.updateQuery("UPDATE chars SET `element` = " + element + " WHERE id=" + charId);
-             this.element = element;
-         }*/
         public bool chacksoltEquip(ushort val)
         {
             bool res = false;
@@ -5078,12 +4654,11 @@ namespace TS_Server.Client
                 default:
                     return res;
             }
-
         }
+
         public bool chackItemEquip(ushort itemid)
         {
             bool res = false;
-
             for (int k = 0; k < equipment.Length; k++)
                 if (equipment[k] != null)
                     if (equipment[k].Itemid == itemid)
@@ -5091,13 +4666,11 @@ namespace TS_Server.Client
                         res = true;
                     }
             return res;
-
-
         }
+
         public int chacksoltitem()
         {
             int res = -1;
-
             for (int k = 0; k < inventory.items.Length; k++)
                 if (inventory.items[k] == null)
                 {
@@ -5106,10 +4679,10 @@ namespace TS_Server.Client
                 }
             return res;
         }
+
         public int chacksoltpet()
         {
             int res = -1;
-
             for (int i = 0; i < 4; i++)
             {
                 if (pet[i] == null)
@@ -5117,30 +4690,20 @@ namespace TS_Server.Client
                     res = 2;
                     break;
                 }
-
             }
             return res;
         }
+
         public int chackparty()
         {
             int res = 1;
-            /*if (party != null)
-            {
-                for (int i = 0; i < party.member.Count; i++)
-                {
-                    if (i == party.member.Count)
-                    {
-                        res = i;
-                        break;
-                    }
-                }
-            }*/
             if (party != null)
             {
                 res = party.member.Count;
             }
             return res;
         }
+
         public bool chackMemLvInparty(ushort val1, ushort sing, ushort val2)
         {
             bool res = false;
@@ -5166,6 +4729,7 @@ namespace TS_Server.Client
             }
             return res;
         }
+
         public int chackgold()
         {
             int res = -1;
@@ -5175,6 +4739,7 @@ namespace TS_Server.Client
             }
             return res;
         }
+
         public int chackLv()
         {
             int res = -1;
@@ -5184,29 +4749,22 @@ namespace TS_Server.Client
             }
             return res;
         }
+
         public int chackElement()
         {
             return element;
         }
 
-        //public bool chackball()
-        //{
-        //    bool res = false;
-        //    for (int i = 0; i < 12; i++)
-        //        if (ballList[i] == false)
-        //            res = true;
-        //    return res;
-        //}
         public bool chackball()
         {
-            bool res = false; // เช็คมุกก่อนค่อยเปิดมุก
-            //bool res = true; // return res เป็น true ไปก่อน เพื่อให้เปิดมุกได้ไม่จำกัด ใช้สำหรับเทสเซิฟไปก่อนเปิดจิงค่อยใส่ค่า  false
+            bool res = false;
             if (allball[0] < 12)
             {
                 res = true;
             }
             return res;
         }
+
         public bool chackIntBall()
         {
             bool res = false;
@@ -5216,6 +4774,7 @@ namespace TS_Server.Client
             }
             return res;
         }
+
         public bool chackAtkBall()
         {
             bool res = false;
@@ -5225,6 +4784,7 @@ namespace TS_Server.Client
             }
             return res;
         }
+
         public int chackPetInchar(int id)
         {
             int npcid = -1;
@@ -5238,6 +4798,7 @@ namespace TS_Server.Client
                 }
             return npcid;
         }
+
         public int chackPetIncar(int id)
         {
             int npcid = -1;
@@ -5251,6 +4812,7 @@ namespace TS_Server.Client
                 }
             return npcid;
         }
+
         public int chackPetInhotel(int id)
         {
             int npcid = -1;
@@ -5264,18 +4826,14 @@ namespace TS_Server.Client
                 }
             return npcid;
         }
+
         public void sleep()
         {
             reply(new PacketCreator(0x1f, 0xa).send());
-
             setHp(getHpMax());
             refresh(hp, TSConstants._HP);
             setSp(getSpMax());
             refresh(sp, TSConstants._SP);
-            //refresh(hp2, TSConstants._HP2);
-            //refresh(sp2, TSConstants._SP2);
-            //Console.WriteLine("in chr hp " + hp + " hp2 " + hp2);
-            //Console.WriteLine("in chr sp " + sp + " sp2 " + sp2);
             for (int i = 0; i < 4; i++)
                 if (pet[i] != null)
                 {
@@ -5284,10 +4842,9 @@ namespace TS_Server.Client
                     pet[i].setSp(pet[i].getSpMax());
                     pet[i].refresh(pet[i].sp, TSConstants._SP);
                 }
-
             client.reply(new PacketCreator(new byte[] { 0x1f, 1, 0 }).send());
-
         }
+
         public void Sendpacket(string packet)
         {
             try
@@ -5296,7 +4853,6 @@ namespace TS_Server.Client
                 if (client.getSocket().Connected)
                 {
                     client.getSocket().Send(array, 0, array.Length, SocketFlags.None);
-                    //Console.WriteLine(">>" + packet);
                 }
             }
             catch (Exception e)
@@ -5304,6 +4860,7 @@ namespace TS_Server.Client
                 WriteLog.Error("Sendpacket : " + e);
             }
         }
+
         public void addSummonSkill(byte level)
         {
             if (skill.ContainsKey(14026))
@@ -5312,6 +4869,7 @@ namespace TS_Server.Client
             }
             skill.TryAdd(14026, level);
         }
+
         public void addSummonSkill()
         {
             if (skill.ContainsKey(14026))
@@ -5339,12 +4897,14 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public void changLost_ItemEquip(int slot, ushort newitem)
         {
             equipment[5].Itemid = newitem;
             equipment[5].level = 0;
             sendEquip();
         }
+
         public void removeSummonSkill()
         {
             if (skill.ContainsKey(14026))
@@ -5373,6 +4933,7 @@ namespace TS_Server.Client
                 }
             }
         }
+
         public void timer_ElapsedLook(object sedr, EventArgs e)
         {
             PacketCreator p = new PacketCreator();
@@ -5385,16 +4946,12 @@ namespace TS_Server.Client
                 {
                     clientTarget.battle.look = false;
                     TSCharacter c = client.getChar();
-
-                    //TSCharacter ct = clientTarget.getChar();
                     BattleAbstract battle = clientTarget.battle;
                     client.getChar().streamBattleId = battlePlayerId;
                     battle.streamers.Add(client.accID);
                     BattleGroundData.battleGroundList.TryGetValue(client.map.mapid, out BattleGroundInfo grounds);
                     ground = grounds.ground > 0 ? grounds.ground : ground;
-                    //Console.WriteLine(client.accID + " ส่องการต่อสู้ของ " + clientTarget.accID);
                     p = new PacketCreator(0x0b, 0xfa);
-                    //p.add16(0x70);
                     p.add16(ground);
                     p.addBytes(new byte[] { 4, 2 });
                     p.add32(client.accID);
@@ -5413,31 +4970,23 @@ namespace TS_Server.Client
                             if (battle.position[i][j].exist)
                             {
                                 lpb.Add(battle.position[i][j].announce(battle.battle_type, battle.countAlly).getData());
-                                //p.addBytes(battle.position[i][j].announce(battle.battle_type, battle.countAlly).getData());
                             }
                         }
                     lpb.ForEach(x => p.addBytes(x));
-                    //byte[] b = p.send();                               
                     client.reply(p.send());
-
                     if (c.party != null)
                     {
                         for (int i = 0; i < c.party.member.Count; i++)
                         {
                             if (client.accID != c.party.member[i].client.accID)
                             {
-
-
                                 TSClient Pclient = c.party.member[i].client;
                                 TSCharacter Pc = Pclient.getChar();
                                 Pc.streamBattleId = battlePlayerId;
                                 battle.streamers.Add(Pclient.accID);
                                 BattleGroundData.battleGroundList.TryGetValue(Pclient.map.mapid, out BattleGroundInfo grounds1);
                                 ground = grounds1.ground > 0 ? grounds1.ground : ground;
-
-
                                 p = new PacketCreator(0x0b, 0xfa);
-                                //p.add16(0x70);
                                 p.add16(ground);
                                 p.addBytes(new byte[] { 4, 2 });
                                 p.add32(Pclient.accID);
@@ -5451,25 +5000,20 @@ namespace TS_Server.Client
                                 p.addByte(Pc.element);
                                 lpb.ForEach(x => p.addBytes(x));
                                 Pclient.reply(p.send());
-
                             }
                         }
                     }
-                    //client.reply(p.send());
                 }
             }
         }
-        /// <summary>
-        /// เพิ่มส่วนของการฝากขุนที่โรงเตี๊ยม
-        /// </summary>
-        /// <returns></returns>
-        public void sendPetFromCharToHotel(byte slot) // << เพิ่มตรงนี้
+
+        public void sendPetFromCharToHotel(byte slot)
         {
             try
             {
                 if (pet_battle == (byte)(slot - 1))
                 {
-                    client.reply(new PacketCreator(0x1f, 0x09).send()); //เมื่อฝากขุนเสร็จแล้วต้องส่งแพคเกตนี้ด้วย เพื่อเคลียร์ปุ่มลูกศรไปขวา
+                    client.reply(new PacketCreator(0x1f, 0x09).send());
                     announce("ไม่สามารถเก็บขุนพลที่กำลังออกรบได้");
                     return;
                 }
@@ -5493,24 +5037,21 @@ namespace TS_Server.Client
                     catch (Exception e)
                     {
                         WriteLog.ErrorDB("sendPetFromCharToHotel " + e);
-                        //c.connection.Close();
                     }
                     finally
                     {
                         c.connection.Close();
                     }
-
                     PacketCreator pPetHotel = new PacketCreator(0x1f, 0x06);
                     pPetHotel.addBytes(pet[next_hotel_pet].sendRestInfo("HOTEL"));
                     reply(pPetHotel.send());
-
                     PacketCreator p = new PacketCreator(0xf, 2);
                     p.add32(client.accID);
                     p.add8(slot);
                     reply(p.send());
                     nextPet();
                 }
-                reply(new PacketCreator(0x1f, 0x09).send()); //เมื่อฝากขุนเสร็จแล้วต้องส่งแพคเกตนี้ด้วย เพื่อเคลียร์ปุ่มลูกศรไปขวา
+                reply(new PacketCreator(0x1f, 0x09).send());
             }
             catch (Exception e)
             {
@@ -5518,7 +5059,8 @@ namespace TS_Server.Client
                 client.disconnect();
             }
         }
-        public void sendPetFromHotelToChar(byte slot) // << เพิ่มตรงนี้
+
+        public void sendPetFromHotelToChar(byte slot)
         {
             try
             {
@@ -5537,15 +5079,12 @@ namespace TS_Server.Client
                     catch (Exception e)
                     {
                         WriteLog.ErrorDB("sendPetFromHotelToChar " + e);
-                        //c.connection.Close();
                     }
                     finally
                     {
                         c.connection.Close();
                     }
-
-                    reply(new PacketCreator(new byte[] { 0x1f, 0x04, slot }).send()); //เคลียสล๊อตในโรงแรม
-
+                    reply(new PacketCreator(new byte[] { 0x1f, 0x04, slot }).send());
                     var p1 = new PacketCreator(0x0f, 8);
                     p1.addBytes(pet[next_pet].sendInfo());
                     reply(p1.send());
@@ -5557,29 +5096,26 @@ namespace TS_Server.Client
                 WriteLog.Error(client.accID + " :: TSCharector >> sendPetFromHotelToChar = " + e);
                 client.disconnect();
             }
-
-            reply(new PacketCreator(0x1f, 0x0c).send()); //เมื่อฝากขุนเสร็จแล้วต้องส่งแพคเกตนี้ด้วย เพื่อเคลียร์ปุ่มลูกศรไปขวา
+            reply(new PacketCreator(0x1f, 0x0c).send());
         }
-        public void switchPetFromCharAndHotel(byte slotHotel, byte slotChar) // << เพิ่มตรงนี้
+
+        public void switchPetFromCharAndHotel(byte slotHotel, byte slotChar)
         {
             try
             {
                 if (pet_battle == (byte)(slotChar - 1))
                 {
-                    reply(new PacketCreator(0x1f, 0x09).send()); //เมื่อฝากขุนเสร็จแล้วต้องส่งแพคเกตนี้ด้วย เพื่อเคลียร์ปุ่มลูกศรไปขวา
+                    reply(new PacketCreator(0x1f, 0x09).send());
                     reply(new PacketCreator(0x1f, 0x0c).send());
                     announce("ไม่สามารถเก็บขุนพลที่กำลังออกรบได้");
                     return;
                 }
                 TSPet petHotelClone = pet[slotHotel + 3].clone();
                 TSPet petCharClone = pet[slotChar - 1].clone();
-
                 petHotelClone.slot = slotChar;
                 petCharClone.slot = (byte)(slotHotel + 4);
-
-                pet[slotChar - 1] = petHotelClone; //<<เปลี่ยนขุนในตัวเป็นขุนจากโรงแรม
-                pet[slotHotel + 3] = petCharClone; //<<เปลี่ยนขุนในโรงแรมเป็นขุนจากตัว
-
+                pet[slotChar - 1] = petHotelClone;
+                pet[slotHotel + 3] = petCharClone;
                 TSMysqlConnection c = new TSMysqlConnection();
                 try
                 {
@@ -5590,59 +5126,31 @@ namespace TS_Server.Client
                 catch (Exception e)
                 {
                     WriteLog.ErrorDB("switchPetFromCharAndHotel " + e);
-                    //c.connection.Close();
                 }
                 finally
                 {
                     c.connection.Close();
                 }
-
-                //TSMysqlConnection c = new TSMysqlConnection();
-                //try
-                //{
-                //    c.connection.Open();
-                //    foreach (var p in pet)
-                //    {
-                //        p.savePetDB(c.connection, false);
-                //    }
-                //}
-                //catch (Exception ex)
-                //{
-                //    // handle exception
-                //}
-                //finally
-                //{
-                //    c.connection.Close();
-                //}
-
-
                 PacketCreator pPetHotel = new PacketCreator(0x1f, 0x06);
                 pPetHotel.addBytes(pet[slotHotel + 3].sendRestInfo("HOTEL"));
                 reply(pPetHotel.send());
-
-                PacketCreator p = new PacketCreator(0x0f, 2); //เคลียช่องขุนในตัวก่อน
+                PacketCreator p = new PacketCreator(0x0f, 2);
                 p.add32(client.accID);
                 p.addByte(slotChar);
                 reply(p.send());
-
                 var p2 = new PacketCreator(0x0f, 8);
                 p2.addBytes(pet[slotChar - 1].sendInfo());
                 reply(p2.send());
-                //announce("สลับขุน ยังติดบัคตำแหน่งขุนในหน้าต่าง Party เพี้ยน ต้องล็อคอินใหม่ถึงจะหาย");
             }
             catch (Exception e)
             {
                 WriteLog.Error(client.accID + " :: TSCharector >> switchPetFromCharAndHotel = " + e);
                 client.disconnect();
             }
-
-            client.reply(new PacketCreator(new byte[] { 0x1f, 0x0c, 0x09 }).send()); //เมื่อฝากขุนเสร็จแล้วต้องส่งแพคเกตนี้ด้วย เพื่อเคลียร์ปุ่มลูกศรไปซ้าย ขวา
+            client.reply(new PacketCreator(new byte[] { 0x1f, 0x0c, 0x09 }).send());
         }
-        /// <summary>
-        /// เพิ่มส่วนของการฝากขุนในรถม้า
-        /// </summary>
-        /// <returns></returns>
-        public void sendPetFromCharToHorse(byte slot) // << เพิ่มตรงนี้
+
+        public void sendPetFromCharToHorse(byte slot)
         {
             try
             {
@@ -5659,7 +5167,6 @@ namespace TS_Server.Client
                 if (next_horse_pet < 14)
                 {
                     byte slotHorse = (byte)(next_horse_pet + 1);
-
                     TSMysqlConnection c = new TSMysqlConnection();
                     try
                     {
@@ -5672,18 +5179,14 @@ namespace TS_Server.Client
                     catch (Exception e)
                     {
                         WriteLog.ErrorDB("sendPetFromCharToHorse " + e);
-                        //c.connection.Close();
                     }
                     finally
                     {
                         c.connection.Close();
                     }
-
-
                     PacketCreator pPetHorse = new PacketCreator(0x0f, 0x0a);
                     pPetHorse.addBytes(pet[next_horse_pet].sendRestInfo("HORSE"));
                     reply(pPetHorse.send());
-
                     PacketCreator p = new PacketCreator(0xf, 2);
                     p.add32(client.accID);
                     p.add8(slot);
@@ -5697,7 +5200,8 @@ namespace TS_Server.Client
                 client.disconnect();
             }
         }
-        public void sendPetFromHorseToChar(byte slot) // << เพิ่มตรงนี้
+
+        public void sendPetFromHorseToChar(byte slot)
         {
             try
             {
@@ -5716,15 +5220,12 @@ namespace TS_Server.Client
                     catch (Exception e)
                     {
                         WriteLog.ErrorDB("sendPetFromHorseToChar " + e);
-                        //c.connection.Close();
                     }
                     finally
                     {
                         c.connection.Close();
                     }
-
-                    reply(new PacketCreator(new byte[] { 0xf, 0x0b, slot }).send()); //เคลียสล๊อตในรถม้า
-
+                    reply(new PacketCreator(new byte[] { 0xf, 0x0b, slot }).send());
                     var p1 = new PacketCreator(0x0f, 8);
                     p1.addBytes(pet[next_pet].sendInfo());
                     reply(p1.send());
@@ -5737,7 +5238,8 @@ namespace TS_Server.Client
                 client.disconnect();
             }
         }
-        public void switchPetFromCharAndHorse(byte slotChar, byte slotHorse) // << เพิ่มตรงนี้
+
+        public void switchPetFromCharAndHorse(byte slotChar, byte slotHorse)
         {
             try
             {
@@ -5748,13 +5250,10 @@ namespace TS_Server.Client
                 }
                 TSPet petHorseClone = pet[slotHorse + 9].clone();
                 TSPet petCharClone = pet[slotChar - 1].clone();
-
                 petHorseClone.slot = slotChar;
                 petCharClone.slot = (byte)(slotHorse + 10);
-
-                pet[slotChar - 1] = petHorseClone; //<<เปลี่ยนขุนในตัวเป็นขุนจากรถม้า
-                pet[slotHorse + 9] = petCharClone; //<<เปลี่ยนขุนในรถม้าเป็นขุนจากตัว
-
+                pet[slotChar - 1] = petHorseClone;
+                pet[slotHorse + 9] = petCharClone;
                 TSMysqlConnection c = new TSMysqlConnection();
                 try
                 {
@@ -5765,26 +5264,21 @@ namespace TS_Server.Client
                 catch (Exception e)
                 {
                     WriteLog.ErrorDB("switchPetFromCharAndHorse " + e);
-                    //c.connection.Close();
                 }
                 finally
                 {
                     c.connection.Close();
                 }
-
                 PacketCreator pPetHorse = new PacketCreator(0x0f, 0x0a);
                 pPetHorse.addBytes(pet[slotHorse + 9].sendRestInfo("HORSE"));
                 reply(pPetHorse.send());
-
-                PacketCreator p = new PacketCreator(0x0f, 2); //เคลียช่องขุนในตัวก่อน
+                PacketCreator p = new PacketCreator(0x0f, 2);
                 p.add32(client.accID);
                 p.addByte(slotChar);
                 reply(p.send());
-
                 var p2 = new PacketCreator(0x0f, 8);
                 p2.addBytes(pet[slotChar - 1].sendInfo());
                 reply(p2.send());
-                //announce("สลับขุน ยังติดบัคตำแหน่งขุนในหน้าต่าง Party เพี้ยน ต้องล็อคอินใหม่ถึงจะหาย");
             }
             catch (Exception e)
             {
@@ -5792,90 +5286,25 @@ namespace TS_Server.Client
                 client.disconnect();
             }
         }
-        /// <summary>
-        /// โอน Item ให้กับผู้เล่นคนอื่น
-        /// </summary>
-        /// <returns></returns>
-        //public bool transferItem(TSClient clientTarget, int mySlot, int amount, bool removeFromOwner)
-        //{
-        //    bool ret = false;
-        //    try
-        //    {
-        //        if (mySlot - 1 >= inventory.items.Length) return false;
-        //        if (inventory.items[mySlot - 1] == null) return false; // ดัก null
 
-
-        //        //Console.WriteLine("send item slot " + mySlot + " amount " + amount + " to " + clientTarget.accID);
-        //        TSItem itemCloned = inventory.items[mySlot - 1].clone();
-
-        //        if (itemCloned.quantity < amount) return false; // ดักจำนวนของในตัวน้อยกว่า จำนวนที่ต้องการ
-
-        //        TSItemContainer inven = clientTarget.getChar().inventory;
-        //        int next_item = inven.next_item;
-        //        int qtyBalance = ((int)itemCloned.quantity) - amount;
-        //        if (next_item < 25)
-        //        {
-        //            int addToSlot = next_item + 1;
-        //            itemCloned.slot = (byte)addToSlot;
-        //            if (itemCloned.equip != null)
-        //            {
-        //                itemCloned.equip.slot = (byte)addToSlot;
-        //            }
-
-        //            if (inventory.items[next_item] == null) return false; // ดัก null
-
-        //            inven.items[next_item] = itemCloned;
-        //            inven.items[next_item].container.owner = clientTarget.getChar();
-        //            inven.items[next_item].quantity = (byte)amount;
-        //            inven.items[next_item].sendSlotItem(clientTarget, inven.items[next_item].slot);
-
-        //            if (removeFromOwner)
-        //            {
-        //                if (qtyBalance <= 0)
-        //                {
-        //                    //Console.WriteLine("หมด slot แล้ว");
-        //                    inventory.destroyItem((byte)mySlot);
-        //                }
-        //                else
-        //                {
-        //                    inventory.items[mySlot - 1].quantity = (byte)qtyBalance;
-        //                }
-        //                reply(new PacketCreator(new byte[] { 0x17, 9, (byte)mySlot, (byte)amount }).send()); ;
-        //            }
-
-        //            inven.nextSlot();
-        //            ret = true;
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        WriteLog.Error("TSCharecter > transferItems " + client.accID + " " + e);
-        //        return false;
-        //    }
-        //    return ret;
-        //}
         public bool transferItem(TSClient clientTarget, int mySlot, int amount, bool removeFromOwner)
         {
             bool ret = false;
             try
             {
-                TSItem itemCloned = inventory.items[mySlot - 1]?.clone();//200001
-                TSItemContainer inven = clientTarget.getChar().inventory;//200000
+                TSItem itemCloned = inventory.items[mySlot - 1]?.clone();
+                TSItemContainer inven = clientTarget.getChar().inventory;
                 int next_item = inven.next_item;
                 int qtyBalance = ((int)itemCloned.quantity) - amount;
                 if (next_item < 25)
                 {
-                    //if (ItemData.itemList[inventory.items[mySlot - 1].Itemid].equippos == 0)
-                    //{
                     inven.items[next_item] = new TSItem(clientTarget.getChar().inventory, inventory.items[mySlot - 1].Itemid, (byte)(next_item + 1), (byte)amount);
                     inven.items[next_item].slot = (byte)(next_item + 1);
                     inven.items[next_item].Itemid = inventory.items[mySlot - 1].Itemid;
                     inven.items[next_item].quantity = (byte)amount;
-                    //}
                     if (ItemData.itemList[inventory.items[mySlot - 1].Itemid].equippos > 0)
                     {
                         inven.items[next_item].equip = new TSEquipment(clientTarget.getChar().inventory.items[next_item].container, inventory.items[mySlot - 1].Itemid, (byte)(next_item + 1), (byte)1);
-                        // inven.items[next_item].equip = inventory.items[mySlot - 1].equip;
                         inven.items[next_item].equip.duration = inventory.items[mySlot - 1].equip.duration;
                         inven.items[next_item].equip.elem_type = inventory.items[mySlot - 1].equip.elem_type;
                         inven.items[next_item].equip.elem_val = inventory.items[mySlot - 1].equip.elem_val;
@@ -5890,7 +5319,6 @@ namespace TS_Server.Client
                     {
                         if (qtyBalance <= 0)
                         {
-                            //Logger.Log("หมด slot แล้ว");
                             inventory.destroyItem((byte)mySlot);
                         }
                         else
@@ -5912,17 +5340,12 @@ namespace TS_Server.Client
             return ret;
         }
 
-        /// <summary>
-        /// โอนเงินให้กับผู้เล่นคนอื่น
-        /// </summary>
-        /// <returns></returns>
         public void transferGold(TSClient clientTarget, uint myGold, bool removeFromOwner)
         {
             TSCharacter charTo = clientTarget.getChar();
             charTo.gold += myGold;
             if (charTo.gold > 9999999) charTo.gold = 9999999;
             charTo.sendGold();
-
             if (removeFromOwner)
             {
                 gold -= myGold;
@@ -5931,25 +5354,19 @@ namespace TS_Server.Client
             }
         }
 
-        /// <summary>
-        /// โอนขุนพลให้กับผู้เล่นคนอื่น
-        /// </summary>
-        /// <returns>result, hex char, hex trader</returns>
         public int[] transferPet(TSClient clientTarget, byte mySlot)
         {
             int[] result = new int[3] { 0, 9, 9 };
             TSCharacter chrTo = clientTarget.getChar();
             int target_next_pet = chrTo.next_pet;
-
             if (target_next_pet >= 4)
             {
                 result[1] = 10;
                 result[2] = 10;
                 return result;
             }
-
             TSPet myPet = pet[mySlot - 1];
-            for (int i = 0; i < chrTo.pet.Length; i++) //เช็คขุนซ้ำ
+            for (int i = 0; i < chrTo.pet.Length; i++)
             {
                 TSPet pet1 = chrTo.pet[i];
                 if (pet1 != null && pet1.NPCid == myPet.NPCid)
@@ -5959,13 +5376,10 @@ namespace TS_Server.Client
                     return result;
                 }
             }
-
             myPet.owner = chrTo;
             myPet.slot = (byte)(target_next_pet + 1);
             chrTo.pet[target_next_pet] = myPet;
             chrTo.sendPetInfo();
-
-
             TSMysqlConnection c = new TSMysqlConnection();
             try
             {
@@ -5976,38 +5390,21 @@ namespace TS_Server.Client
             catch (Exception e)
             {
                 WriteLog.ErrorDB("transferPet " + e);
-                //c.connection.Close();
             }
             finally
             {
                 c.connection.Close();
             }
-
             result[0] = 1;
             result[1] = 4;
             result[2] = 4;
-
             chrTo.nextPet();
             nextPet();
-            //Console.WriteLine("target_next_pet " + target_next_pet);
-
             PacketCreator p = new PacketCreator(0xf, 2);
             p.add32(client.accID);
             p.add8(mySlot);
-            //reply(p.send());
             replyToMap(p.send(), true);
-            sendTeam();//<<เพิ่มมาใหม่
-
-
-
-
-
-            /*for (int x = 0; x < chrTo.pet.Length; x++)
-            {
-                string idd = pet[x] != null ? pet[x].NPCid.ToString() : "Null";
-                Console.WriteLine("index " + x + " = " + idd);
-            }*/
-
+            sendTeam();
             return result;
         }
 
@@ -6017,7 +5414,6 @@ namespace TS_Server.Client
             for (int i = 0; i < 25; i++)
                 if (inventory.items[i] == null)
                     ret++;
-
             return ret;
         }
 
@@ -6028,6 +5424,7 @@ namespace TS_Server.Client
             myTradeItemsAccept = false;
             myTradeItemsRegisterSlots = null;
         }
+
         public void tradingPetClear()
         {
             myTradePetTraderId = 0;
@@ -6035,6 +5432,7 @@ namespace TS_Server.Client
             myTradePetAccept = false;
             myTradePetRegisterSlot = 0;
         }
+
         public byte[] getMyShopLabel()
         {
             if (myShopName != null)
@@ -6044,50 +5442,40 @@ namespace TS_Server.Client
                 pShop.add32(client.accID);
                 pShop.addByte((byte)shopNameLen);
                 pShop.addString(myShopName);
-                pShop.addByte((byte)myShopImage); //สัญลักษณ์ร้านค้า
+                pShop.addByte((byte)myShopImage);
                 return pShop.send();
             }
             return null;
         }
-        /// <summary>
-        /// เพื่อดูว่าผู้เล่นคนอื่นทำอะไรอยู่เช่น ตั้งร้าน หรือ ต่อสู้อยู่ เป็นต้น (ต้องวนลูปเอานะ)
-        /// </summary>
-        /// <param name="clientOther"></param>
+
         public void sendOtherPlayerDoing(TSClient clientOther)
         {
-            if (clientOther.battle != null && clientOther.accID != client.accID) clientOther.map.announceBattle(clientOther); //<<--เพื่อให้เห็นคนที่สู้อยู่คลกฝุ่น
-            if (client.battle != null && client.accID != clientOther.accID) client.map.announceBattle(client); //<<--เพื่อให้เห็นคนที่สู้อยู่คลกฝุ่น                                                                                                    //if (client.battle != null && client.accID != clientOther.accID) client.map.announceBattle(client); //<<--เพื่อให้เห็นคนที่สู้อยู่คลกฝุ่น
-
+            if (clientOther.battle != null && clientOther.accID != client.accID) clientOther.map.announceBattle(clientOther);
+            if (client.battle != null && client.accID != clientOther.accID) client.map.announceBattle(client);
             byte[] cShop = clientOther.getChar().getMyShopLabel();
-            if (cShop != null) client.reply(cShop);//<<--เพื่อให้เห็นคนที่ตั้งร้าน
-
+            if (cShop != null) client.reply(cShop);
             if (clientOther.battle == null)
                 client.map.ClearBattleSmoke(clientOther);
-
             if (client.battle == null)
                 clientOther.map.ClearBattleSmoke(client);
-
-
-
-
-            // แสดงชื่อกิลเหนือหัวให้เห็นกัน
             if (clientOther.accID != client.accID)
                 GuildSystem.OnEnterMap(this, clientOther.getChar());
+        }
 
-            //if (clientOther.accID != client.accID) client.reply(clientOther.getChar().sendLookForOther());
-            //if (client.accID != clientOther.accID) clientOther.reply(sendLookForOther()); //nice line :))
-
-
-            //if (clientOther.accID != client.accID) sendPetInfo();
-            //if (client.accID != clientOther.accID) clientOther.getChar().sendPetInfo();
-
-            //if (clientOther.accID != client.accID) clientOther.getChar().showguildname2(); //ให้เราเห็นชื่อกิลคนอื่น
-            //if (clientOther.accID != client.accID) clientOther.getChar().guildrad2();
-            //if (client.accID != clientOther.accID) showguildname2(); //ให้เราเห็นชื่อกิลคนอื่นเมื่อคนนั้นเข้าแมพเรา
-
-            // clientOther.getChar().sendUpdateTeam();
-            // sendUpdateTeam();
-
+        public void StopAllTimers()
+        {
+            timerautosave?.Stop();
+            timerautosave?.Dispose();
+            timer?.Stop();
+            timer?.Dispose();
+            timerAutospSub?.Stop();
+            timerAutospSub?.Dispose();
+            looktime?.Stop();
+            looktime?.Dispose();
+            combotime?.Stop();
+            combotime?.Dispose();
+            checkEndtime?.Stop();
+            checkEndtime?.Dispose();
         }
     }
 }
